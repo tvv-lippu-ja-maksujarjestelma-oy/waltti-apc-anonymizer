@@ -160,6 +160,11 @@ const exitGracefully = async (
       logger.info(`Start service ${serviceName}`);
       logger.info("Read configuration");
       const config = getConfig(logger);
+      // FIXME: remove after debugging
+      // eslint-disable-next-line no-console
+      console.log("vehicleProfileMap");
+      // eslint-disable-next-line no-console
+      console.log(config.anonymization.vehicleProfileMap);
       logger.info("Create health check server");
       ({ closeHealthCheckServer, setHealthOk } = createHealthCheckServer(
         config.healthCheck,
