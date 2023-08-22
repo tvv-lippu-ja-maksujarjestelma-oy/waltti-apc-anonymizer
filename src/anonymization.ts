@@ -139,6 +139,36 @@ export const anonymize = (
       );
     } else {
       const acceptedCountingDeviceId = acceptedDeviceMap.get(uniqueVehicleId);
+      // FIXME: remove these chatty logs when new vehicles with counting devices
+      //        are available
+      if (acceptedCountingDeviceId == null) {
+        logger.debug(
+          {
+            uniqueVehicleId,
+            matchedApcMessage: JSON.stringify(matchedApcMessage),
+          },
+          "The vehicle was not in acceptedDeviceMap",
+        );
+      } else if (
+        acceptedCountingDeviceId === matchedApcMessage.countingDeviceId
+      ) {
+        logger.debug(
+          {
+            uniqueVehicleId,
+            matchedApcMessage: JSON.stringify(matchedApcMessage),
+          },
+          "The vehicle was in acceptedDeviceMap and the device is accepted",
+        );
+      } else {
+        logger.debug(
+          {
+            uniqueVehicleId,
+            matchedApcMessage: JSON.stringify(matchedApcMessage),
+            acceptedCountingDeviceId,
+          },
+          "The vehicle was in acceptedDeviceMap but the device is not accepted",
+        );
+      }
       /**
        * As there are only a few vehicles with more than one counting device,
        * the map contains only those vehicles. If a vehicle is not in the map,
