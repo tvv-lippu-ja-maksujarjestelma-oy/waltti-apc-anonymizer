@@ -118,7 +118,7 @@ export const anonymize = (
   matchedApcMessage: matchedApc.MatchedApc,
   { feedPublisherWalttiAuthorityMap, acceptedDeviceMap }: AnonymizationConfig,
 ): anonymizedApc.AnonymizedApc | undefined => {
-  let result;
+  let result: anonymizedApc.AnonymizedApc | undefined;
   const vehicleId = matchedApcMessage.gtfsrtVehicleId;
   const walttiAuthorityId = matchedApcMessage.authorityId;
   const feedPublisherId =
@@ -169,6 +169,15 @@ export const anonymize = (
           "The vehicle was in acceptedDeviceMap but the device is not accepted",
         );
       }
+      if (matchedApcMessage.countQuality !== matchedApc.CountQuality.Regular) {
+        logger.debug(
+          {
+            uniqueVehicleId,
+            matchedApcMessage: JSON.stringify(matchedApcMessage),
+          },
+          "The count quality was not regular",
+        );
+      }
       /**
        * As there are only a few vehicles with more than one counting device,
        * the map contains only those vehicles. If a vehicle is not in the map,
@@ -186,10 +195,30 @@ export const anonymize = (
           matchedApcMessage.doorClassCounts,
         );
         const occupancyStatusString = sample(logger, profile, currentSum);
+        // FIXME: remove after debugging
+        logger.debug(
+          {
+            occupancyStatusString,
+            profile,
+            currentSum,
+            uniqueVehicleId,
+            uniqueVehicleJourneyId,
+          },
+          "occupancyStatusString has been calculated",
+        );
         if (occupancyStatusString != null) {
           result = buildAnonymizedApcMessage(
             matchedApcMessage,
             occupancyStatusString,
+          );
+          // FIXME: remove after debugging
+          logger.debug(
+            {
+              anonymizedApcMessage: JSON.stringify(result),
+              uniqueVehicleId,
+              uniqueVehicleJourneyId,
+            },
+            "anonymizedApcMessage has been calculated",
           );
         }
       }
