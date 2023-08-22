@@ -114,6 +114,11 @@ const getOptionalBooleanWithDefault = (
 };
 
 const getStringMap = (envVariable: string): Map<string, string> => {
+  // FIXME: remove after debugging
+  // eslint-disable-next-line no-console
+  console.log("config.ts: getStringMap: getRequired");
+  // eslint-disable-next-line no-console
+  console.log(getRequired(envVariable));
   // Check the contents below. Crashing here is fine, too.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const keyValueList = JSON.parse(getRequired(envVariable));
@@ -160,6 +165,11 @@ const getAcceptedDeviceMap = (envVariable: string): AcceptedDeviceMap => {
 
 const getVehicleProfileMap = (envVariable: string): VehicleProfileMap => {
   const profiles = getStringMap(envVariable);
+  // FIXME: remove after debugging
+  // eslint-disable-next-line no-console
+  console.log("config.ts: profiles");
+  // eslint-disable-next-line no-console
+  console.log(profiles);
   return createProfileMap({ profiles: Object.fromEntries(profiles.entries()) });
 };
 
