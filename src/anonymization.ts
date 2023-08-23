@@ -64,16 +64,43 @@ export const getCountAndUpdateCache = (
   return currentCount[1];
 };
 
+export const matchOccupancyStatus = (
+  occupancyStatusString: string,
+): anonymizedApc.OccupancyStatus | undefined =>
+  Object.entries(anonymizedApc.OccupancyStatus).find(
+    // According to the tests, this ESLint warning is irrelevant.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
+    ([, value]) => value === occupancyStatusString,
+  )?.[1];
+
+export const redactCounts = (
+  matchedApcMessage: matchedApc.MatchedApc,
+): Omit<matchedApc.MatchedApc, "doorClassCounts"> => {
+  const reducedObject:
+    | Omit<matchedApc.MatchedApc, "doorClassCounts">
+    | matchedApc.MatchedApc = { ...matchedApcMessage };
+  delete reducedObject.doorClassCounts;
+  return reducedObject;
+};
+
 export const buildAnonymizedApcMessage = (
+  logger: pino.Logger,
   matchedApcMessage: matchedApc.MatchedApc,
   occupancyStatusString: string,
 ): anonymizedApc.AnonymizedApc | undefined => {
-  let result;
-  const occupancyStatus =
-    anonymizedApc.OccupancyStatus[
-      occupancyStatusString as keyof typeof anonymizedApc.OccupancyStatus
-    ];
-  if (occupancyStatus != null) {
+  let result: anonymizedApc.AnonymizedApc | undefined;
+  const occupancyStatus = matchOccupancyStatus(occupancyStatusString);
+  if (occupancyStatus == null) {
+    logger.error(
+      {
+        matchedApcMessageWithoutCounts: JSON.stringify(
+          redactCounts(matchedApcMessage),
+        ),
+        occupancyStatusString,
+      },
+      "occupancyStatusString did not match enum OccupancyStatus",
+    );
+  } else {
     result = {
       schemaVersion: "1-0-0",
       timestamp: new Date().toISOString(),
@@ -145,7 +172,7 @@ export const anonymize = (
         logger.debug(
           {
             uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(matchedApcMessage),
+            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
           },
           "The vehicle was not in acceptedDeviceMap",
         );
@@ -155,7 +182,7 @@ export const anonymize = (
         logger.debug(
           {
             uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(matchedApcMessage),
+            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
           },
           "The vehicle was in acceptedDeviceMap and the device is accepted",
         );
@@ -163,7 +190,7 @@ export const anonymize = (
         logger.debug(
           {
             uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(matchedApcMessage),
+            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
             acceptedCountingDeviceId,
           },
           "The vehicle was in acceptedDeviceMap but the device is not accepted",
@@ -173,7 +200,7 @@ export const anonymize = (
         logger.debug(
           {
             uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(matchedApcMessage),
+            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
           },
           "The count quality was not regular",
         );
@@ -208,6 +235,7 @@ export const anonymize = (
         );
         if (occupancyStatusString != null) {
           result = buildAnonymizedApcMessage(
+            logger,
             matchedApcMessage,
             occupancyStatusString,
           );

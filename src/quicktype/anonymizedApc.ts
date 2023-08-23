@@ -32,7 +32,7 @@ export interface AnonymizedApc {
    * https://gtfs.org/realtime/reference/#message-vehicleposition . Only values from 'EMPTY'
    * to 'FULL' are provided via these messages. If no anonymized APC message is available for
    * a particular trip, then use the value 'NO_DATA_AVAILABLE', unless you know that either
-   * 'NOT_ACCEPTING_PASSENGERS' or 'NOT_BOARDABLE' is more approriate.
+   * 'NOT_ACCEPTING_PASSENGERS' or 'NOT_BOARDABLE' is more appropriate.
    */
   occupancyStatus: OccupancyStatus;
   /**
@@ -86,7 +86,7 @@ export interface AnonymizedApc {
  * https://gtfs.org/realtime/reference/#message-vehicleposition . Only values from 'EMPTY'
  * to 'FULL' are provided via these messages. If no anonymized APC message is available for
  * a particular trip, then use the value 'NO_DATA_AVAILABLE', unless you know that either
- * 'NOT_ACCEPTING_PASSENGERS' or 'NOT_BOARDABLE' is more approriate.
+ * 'NOT_ACCEPTING_PASSENGERS' or 'NOT_BOARDABLE' is more appropriate.
  */
 export enum OccupancyStatus {
   CrushedStandingRoomOnly = "CRUSHED_STANDING_ROOM_ONLY",
