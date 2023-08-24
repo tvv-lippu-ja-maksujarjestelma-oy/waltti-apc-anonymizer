@@ -253,6 +253,7 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   );
   const compressionType = getPulsarCompressionType();
   const profileReaderTopic = getRequired("PULSAR_PROFILE_READER_TOPIC");
+  const profileReaderName = getRequired("PULSAR_PROFILE_READER_NAME");
   const profileReaderStartMessageId = Pulsar.MessageId.latest();
   const apcConsumerTopicsPattern = getRequired(
     "PULSAR_APC_CONSUMER_TOPICS_PATTERN",
@@ -274,6 +275,7 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
     },
     profileReaderConfig: {
       topic: profileReaderTopic,
+      readerName: profileReaderName,
       startMessageId: profileReaderStartMessageId,
     },
     apcConsumerConfig: {
