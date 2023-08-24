@@ -202,7 +202,7 @@ export const anonymize = (
             uniqueVehicleId,
             matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
           },
-          "The count quality was not regular",
+          "The count quality is not regular. We will use it anyway.",
         );
       }
       /**
@@ -211,9 +211,8 @@ export const anonymize = (
        * the device is accepted for publishing.
        */
       if (
-        (acceptedCountingDeviceId == null ||
-          acceptedCountingDeviceId === matchedApcMessage.countingDeviceId) &&
-        matchedApcMessage.countQuality === matchedApc.CountQuality.Regular
+        acceptedCountingDeviceId == null ||
+        acceptedCountingDeviceId === matchedApcMessage.countingDeviceId
       ) {
         const currentSum = getCountAndUpdateCache(
           countCache,
