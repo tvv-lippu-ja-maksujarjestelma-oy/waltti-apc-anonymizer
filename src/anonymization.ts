@@ -98,7 +98,7 @@ export const buildAnonymizedApcMessage = (
         ),
         occupancyStatusString,
       },
-      "occupancyStatusString did not match enum OccupancyStatus",
+      "occupancyStatusString did not match enum OccupancyStatus. Likely the vehicle profile has an unexpected CSV header.",
     );
   } else {
     result = {
@@ -166,41 +166,24 @@ export const anonymize = (
       );
     } else {
       const acceptedCountingDeviceId = acceptedDeviceMap.get(uniqueVehicleId);
-      // FIXME: remove these chatty logs when new vehicles with counting devices
-      //        are available
-      if (acceptedCountingDeviceId == null) {
-        logger.debug(
-          {
-            uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
-          },
-          "The vehicle was not in acceptedDeviceMap",
-        );
-      } else if (
-        acceptedCountingDeviceId === matchedApcMessage.countingDeviceId
+      if (
+        acceptedCountingDeviceId != null &&
+        acceptedCountingDeviceId !== matchedApcMessage.countingDeviceId
       ) {
         logger.debug(
           {
             uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
-          },
-          "The vehicle was in acceptedDeviceMap and the device is accepted",
-        );
-      } else {
-        logger.debug(
-          {
-            uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
+            matchedApcMessage: redactCounts(matchedApcMessage),
             acceptedCountingDeviceId,
           },
-          "The vehicle was in acceptedDeviceMap but the device is not accepted",
+          "The vehicle is in acceptedDeviceMap but the counting device is not the one accepted for publishing.",
         );
       }
       if (matchedApcMessage.countQuality !== matchedApc.CountQuality.Regular) {
         logger.debug(
           {
             uniqueVehicleId,
-            matchedApcMessage: JSON.stringify(redactCounts(matchedApcMessage)),
+            matchedApcMessage: redactCounts(matchedApcMessage),
           },
           "The count quality is not regular. We will use it anyway.",
         );
@@ -221,31 +204,11 @@ export const anonymize = (
           matchedApcMessage.doorClassCounts,
         );
         const occupancyStatusString = sample(logger, profile, currentSum);
-        // FIXME: remove after debugging
-        logger.debug(
-          {
-            occupancyStatusString,
-            profile,
-            currentSum,
-            uniqueVehicleId,
-            uniqueVehicleJourneyId,
-          },
-          "occupancyStatusString has been calculated",
-        );
         if (occupancyStatusString != null) {
           result = buildAnonymizedApcMessage(
             logger,
             matchedApcMessage,
             occupancyStatusString,
-          );
-          // FIXME: remove after debugging
-          logger.debug(
-            {
-              anonymizedApcMessage: JSON.stringify(result),
-              uniqueVehicleId,
-              uniqueVehicleJourneyId,
-            },
-            "anonymizedApcMessage has been calculated",
           );
         }
       }
