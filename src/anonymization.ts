@@ -5,8 +5,8 @@ import {
   UniqueVehicleId,
   UniqueVehicleJourneyId,
   VehiclePassengerCountMap,
-  VehicleProfileMap,
-} from "./config";
+  VehicleProfile,
+} from "./types";
 import * as anonymizedApc from "./quicktype/anonymizedApc";
 import * as matchedApc from "./quicktype/matchedApc";
 import { sample } from "./sampling";
@@ -57,6 +57,7 @@ export const getCountAndUpdateCache = (
     uniqueVehicleJourneyId,
     messageSum,
   ];
+  // FIXME: somewhere here, change the code so that the counter is zeroed after 30 minutes of the vehicle being on deadrun
   if (cachedCount != null && cachedCount[0] === uniqueVehicleJourneyId) {
     currentCount = [uniqueVehicleJourneyId, cachedCount[1] + messageSum];
   }
@@ -140,7 +141,7 @@ const getUniqueVehicleJourneyId = (
 
 export const anonymize = (
   logger: pino.Logger,
-  vehicleProfileMap: VehicleProfileMap,
+  lookup: (uniqueVehicleId: UniqueVehicleId) => VehicleProfile | undefined,
   countCache: VehiclePassengerCountMap,
   matchedApcMessage: matchedApc.MatchedApc,
   { feedPublisherWalttiAuthorityMap, acceptedDeviceMap }: AnonymizationConfig,
@@ -158,11 +159,11 @@ export const anonymize = (
   } else {
     const uniqueVehicleId: UniqueVehicleId = `${feedPublisherId}:${vehicleId}`;
     const uniqueVehicleJourneyId = getUniqueVehicleJourneyId(matchedApcMessage);
-    const profile = vehicleProfileMap.get(uniqueVehicleId);
+    const profile = lookup(uniqueVehicleId);
     if (profile == null) {
       logger.debug(
         { uniqueVehicleId },
-        "The vehicle is not in the vehicleProfileMap. It will probably end there later. Meanwhile the data from this vehicle is skipped.",
+        "We do not have a vehicle profile for this vehicle. We will probably have one later. Meanwhile the data from this vehicle is skipped.",
       );
     } else {
       const acceptedCountingDeviceId = acceptedDeviceMap.get(uniqueVehicleId);
@@ -174,13 +175,14 @@ export const anonymize = (
           {
             uniqueVehicleId,
             matchedApcMessage: redactCounts(matchedApcMessage),
+            countingDeviceId: matchedApcMessage.countingDeviceId,
             acceptedCountingDeviceId,
           },
-          "The vehicle is in acceptedDeviceMap but the counting device is not the one accepted for publishing.",
+          "There are multiple counting systems in the vehicle. This is not the one preferred for publishing. Skip the message.",
         );
       }
       if (matchedApcMessage.countQuality !== matchedApc.CountQuality.Regular) {
-        logger.debug(
+        logger.warn(
           {
             uniqueVehicleId,
             matchedApcMessage: redactCounts(matchedApcMessage),

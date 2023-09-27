@@ -1,92 +1,14 @@
 import type pino from "pino";
 import Pulsar from "pulsar-client";
-import type { MatchedApc } from "./quicktype/matchedApc";
-// FIXME: this is temporary workaround
-// eslint-disable-next-line import/no-cycle
-import createProfileMap from "./profile";
-
-export type CountingDeviceId = string;
-
-export type FeedPublisherId = string;
-
-export type WalttiAuthorityId = string;
-
-export type VehicleId = string;
-
-export type UniqueVehicleId = `${FeedPublisherId}:${VehicleId}`;
-
-export type CountingVendorName = MatchedApc["countingVendorName"];
-
-export type CountingSystemMap = Map<
-  CountingDeviceId,
-  [UniqueVehicleId, CountingVendorName]
->;
-
-export interface UniqueVehicleJourneyId {
-  gtfsrtDirectionId: MatchedApc["gtfsrtDirectionId"];
-  gtfsrtRouteId: MatchedApc["gtfsrtRouteId"];
-  gtfsrtStartDate: MatchedApc["gtfsrtStartDate"];
-  gtfsrtStartTime: MatchedApc["gtfsrtStartTime"];
-  gtfsrtTripId: MatchedApc["gtfsrtTripId"];
-}
-
-export type VehiclePassengerCountMap = Map<
-  UniqueVehicleId,
-  [UniqueVehicleJourneyId, PassengerCount]
->;
-
-export type TimezoneName = string;
-
-export type FeedMap = Map<
-  string,
-  [FeedPublisherId, WalttiAuthorityId, TimezoneName]
->;
-
-export type PassengerCount = number;
-
-export interface VehicleProfile {
-  categories: string[];
-  cdf: Float64Array[];
-}
-
-export type VehicleProfileMap = Map<UniqueVehicleId, VehicleProfile>;
-export type AcceptedDeviceMap = Map<UniqueVehicleId, CountingDeviceId>;
-
-export interface AnonymizationConfig {
-  feedPublisherWalttiAuthorityMap: Map<WalttiAuthorityId, FeedPublisherId>;
-  // FIXME: this should be read via Pulsar
-  vehicleProfileMap: VehicleProfileMap;
-  acceptedDeviceMap: AcceptedDeviceMap;
-}
-
-export interface PulsarOauth2Config {
-  // pulsar-client requires "type" but that seems unnecessary
-  type: string;
-  issuer_url: string;
-  client_id?: string;
-  client_secret?: string;
-  private_key?: string;
-  audience?: string;
-  scope?: string;
-}
-
-export interface PulsarConfig {
-  oauth2Config: PulsarOauth2Config;
-  clientConfig: Pulsar.ClientConfig;
-  producerConfig: Pulsar.ProducerConfig;
-  profileReaderConfig: Pulsar.ReaderConfig;
-  apcConsumerConfig: Pulsar.ConsumerConfig;
-}
-
-export interface HealthCheckConfig {
-  port: number;
-}
-
-export interface Config {
-  anonymization: AnonymizationConfig;
-  pulsar: PulsarConfig;
-  healthCheck: HealthCheckConfig;
-}
+import * as profileCollection from "./quicktype/profileCollection";
+import {
+  AcceptedDeviceMap,
+  AnonymizationConfig,
+  Config,
+  PulsarConfig,
+  VehicleProfileMap,
+} from "./types";
+import { createProfileMap } from "./vehicleProfile";
 
 const getRequired = (envVariable: string) => {
   const variable = process.env[envVariable];
@@ -158,19 +80,47 @@ const getAcceptedDeviceMap = (envVariable: string): AcceptedDeviceMap => {
   return stringMap as AcceptedDeviceMap;
 };
 
-const getVehicleProfileMap = (envVariable: string): VehicleProfileMap => {
-  const profiles = getStringMap(envVariable);
-  return createProfileMap({ profiles: Object.fromEntries(profiles.entries()) });
+const getProfileCollectionBase = (
+  logger: pino.Logger,
+  envVariable: string,
+): VehicleProfileMap => {
+  let map: VehicleProfileMap = {
+    vehicleModels: new Map(),
+    modelProfiles: new Map(),
+  };
+  const string = getOptional(envVariable);
+  if (string != null) {
+    try {
+      const collection = profileCollection.Convert.toProfileCollection(string);
+      const possibleMap = createProfileMap(logger, collection);
+      if (possibleMap != null) {
+        map = possibleMap;
+      }
+    } catch (err) {
+      throw new Error(
+        `If given, ${envVariable} must contain JSON representing a valid profile collection. Instead, this was given: ${string}`,
+      );
+    }
+  }
+  return map;
 };
 
-const getAnonymizationConfig = (): AnonymizationConfig => {
+const getAnonymizationConfig = (logger: pino.Logger): AnonymizationConfig => {
   const feedPublisherWalttiAuthorityMap = getStringMap("AUTHORITY_MAP");
-  const vehicleProfileMap = getVehicleProfileMap("VEHICLE_PROFILE_MAP");
   const acceptedDeviceMap = getAcceptedDeviceMap("ACCEPTED_DEVICE_MAP");
+  const profileCollectionBase = getProfileCollectionBase(
+    logger,
+    "PROFILE_COLLECTION_BASE",
+  );
+  const isInitialProfileReadingRequired = getOptionalBooleanWithDefault(
+    "IS_INITIAL_PROFILE_READING_REQUIRED",
+    true,
+  );
   return {
     feedPublisherWalttiAuthorityMap,
-    vehicleProfileMap,
     acceptedDeviceMap,
+    profileCollectionBase,
+    isInitialProfileReadingRequired,
   };
 };
 
@@ -244,7 +194,10 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const compressionType = getPulsarCompressionType();
   const profileReaderTopic = getRequired("PULSAR_PROFILE_READER_TOPIC");
   const profileReaderName = getRequired("PULSAR_PROFILE_READER_NAME");
-  const profileReaderStartMessageId = Pulsar.MessageId.latest();
+  // As we cannot select to start on the last message but right after,
+  // set to start at the beginning. If you change the value, review the logic in
+  // getLatestMessage from messageProcessing.ts.
+  const profileReaderStartMessageId = Pulsar.MessageId.earliest();
   const apcConsumerTopicsPattern = getRequired(
     "PULSAR_APC_CONSUMER_TOPICS_PATTERN",
   );
@@ -282,8 +235,10 @@ const getHealthCheckConfig = () => {
   return { port };
 };
 
-export const getConfig = (logger: pino.Logger): Config => ({
-  anonymization: getAnonymizationConfig(),
+const getConfig = (logger: pino.Logger): Config => ({
+  anonymization: getAnonymizationConfig(logger),
   pulsar: getPulsarConfig(logger),
   healthCheck: getHealthCheckConfig(),
 });
+
+export default getConfig;
