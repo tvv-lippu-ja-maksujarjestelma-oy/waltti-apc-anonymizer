@@ -50,7 +50,7 @@
     "prettier": "^3.1.0",
     "quicktype": "^23.0.78",
     "ts-jest": "^29.1.1",
-    "typescript": "^5.2.2"
+    "typescript": "^5.3.2"
   },
   "dependencies": {
     "@stdlib/blas-ext-base-gcusumkbn2": "^0.1.0",
