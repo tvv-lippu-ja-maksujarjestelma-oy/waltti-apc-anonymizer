@@ -1,9 +1,9 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
-import { getConfig } from "./config";
+import getConfig from "./config";
 import { createLogger } from "./gcpLogging";
 import createHealthCheckServer from "./healthCheck";
-import { keepProcessingMessages } from "./messageProcessing";
+import keepProcessingMessages from "./messageProcessing";
 import {
   createPulsarClient,
   createPulsarProducer,
