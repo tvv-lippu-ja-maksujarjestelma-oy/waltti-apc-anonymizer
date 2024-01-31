@@ -2,99 +2,81 @@ import type pino from "pino";
 import type Pulsar from "pulsar-client";
 import type {
   AnonymizationConfig,
+  UniqueVehicleId,
   VehiclePassengerCountMap,
-  VehicleProfileMap,
-} from "./config";
+  VehicleProfile,
+} from "./types";
 import * as anonymizedApc from "./quicktype/anonymizedApc";
 import * as matchedApc from "./quicktype/matchedApc";
-import * as profileCollection from "./quicktype/profileCollection";
-import createProfileMap from "./profile";
 import { anonymize } from "./anonymization";
+import { createVehicleProfileSearch } from "./vehicleProfile";
 
 /**
- * Replace contents of a Map in-place.
+ * Get the latest message with the reader.
  *
- * @param map The Map to be fully updated in-place.
- * @param newContents The Map whose contents will be copied into map.
+ * If there are no messages in the topic, we wait for the next message. If there
+ * are messages in the topic, we start a search for the latest message backwards
+ * from the current time.
+ *
+ * If the topic is empty, wait for the next message.
+ *
+ * If at some point the Pulsar client allows us to get directly to the last
+ * message and not after it, refactor to use that approach.
+ *
+ * @param reader The Pulsar Reader to read from.
+ * @param stepInSeconds How far back do we step from the current moment to start
+ *   looking for messages in the topic. The default is one week.
+ * @returns The latest message in the topic.
  */
-export const updateMap = <K, V>(
-  map: Map<K, V>,
-  newContents: Map<K, V>,
-): void => {
-  map.clear();
-  newContents.forEach((value, key) => map.set(key, value));
-};
-
-const updateProfiles = async (
-  logger: pino.Logger,
-  vehicleProfileMap: VehicleProfileMap,
-  profileReader: Pulsar.Reader,
-) => {
-  const profileCollectionPulsarMessage = await profileReader.readNext();
-  const profileCollectionDataString = profileCollectionPulsarMessage
-    .getData()
-    .toString("utf8");
-  let collection;
-  try {
-    collection = profileCollection.Convert.toProfileCollection(
-      profileCollectionDataString,
-    );
-  } catch (err) {
-    logger.error(
-      {
-        err,
-        profileCollectionPulsarMessage: JSON.stringify(
-          profileCollectionPulsarMessage,
-        ),
-        profileCollectionDataString,
-      },
-      "Could not parse profileCollectionPulsarMessage",
-    );
-  }
-  if (collection != null) {
-    let newVehicleProfileMap;
-    try {
-      newVehicleProfileMap = createProfileMap(collection);
-    } catch (err) {
-      logger.error({ err, collection }, "Could not create vehicle profile map");
+const getLatestMessage = async (
+  reader: Pulsar.Reader,
+  stepInSeconds: number = 60 * 60 * 24 * 7,
+): Promise<Pulsar.Message> => {
+  let message: Pulsar.Message;
+  // In getPulsarConfig from config.ts the reader was hard coded to start from
+  // the beginning of the topic. Rely on that.
+  const isAnyMessageInTopic = reader.hasNext();
+  if (isAnyMessageInTopic) {
+    // Search exponentially further back until one or more messages become
+    // available.
+    const now = Date.now();
+    let stepInMilliseconds = 1_000 * stepInSeconds;
+    let seekTimeInMilliseconds = now - stepInMilliseconds;
+    await reader.seekTimestamp(seekTimeInMilliseconds);
+    /* eslint-disable no-await-in-loop */
+    while (!reader.hasNext()) {
+      stepInMilliseconds *= 2;
+      seekTimeInMilliseconds = now - stepInMilliseconds;
+      await reader.seekTimestamp(seekTimeInMilliseconds);
     }
-    if (newVehicleProfileMap != null) {
-      updateMap(vehicleProfileMap, newVehicleProfileMap);
+    while (reader.hasNext()) {
+      message = await reader.readNext();
     }
+    /* eslint-enable no-await-in-loop */
+  } else {
+    message = await reader.readNext();
   }
+  // TypeScript does not understand reader.hasNext() behavior so claims that
+  // message might be undefined. Use the non-null assertion operator.
+  return message!;
 };
-
-// FIXME: not needed yet
-// const formInitialProfile = async (
-//   logger: pino.Logger,
-//   profileReader: Pulsar.Reader
-// ): Promise<VehicleProfileMap> => {
-//   const vehicleProfileMap: VehicleProfileMap = new Map();
-//   // Errors are handled in the calling function.
-//   /* eslint-disable no-await-in-loop */
-//   while (vehicleProfileMap.size < 1) {
-//     await updateProfiles(logger, vehicleProfileMap, profileReader);
-//   }
-//   /* eslint-enable no-await-in-loop */
-//   return vehicleProfileMap;
-// };
 
 const keepUpdatingProfiles = async (
-  logger: pino.Logger,
-  vehicleProfileMap: VehicleProfileMap,
+  update: (message: Pulsar.Message) => void,
   profileReader: Pulsar.Reader,
 ) => {
   // Errors are handled in the calling function.
   /* eslint-disable no-await-in-loop */
   for (;;) {
-    await updateProfiles(logger, vehicleProfileMap, profileReader);
+    const message = await profileReader.readNext();
+    update(message);
   }
   /* eslint-enable no-await-in-loop */
 };
 
 const handleApcMessage = (
   logger: pino.Logger,
-  vehicleProfileMap: VehicleProfileMap,
+  lookup: (uniqueVehicleId: UniqueVehicleId) => VehicleProfile | undefined,
   countCache: VehiclePassengerCountMap,
   apcPulsarMessage: Pulsar.Message,
   config: AnonymizationConfig,
@@ -117,7 +99,7 @@ const handleApcMessage = (
   if (apcMessage != null) {
     const anonymizedApcData = anonymize(
       logger,
-      vehicleProfileMap,
+      lookup,
       countCache,
       apcMessage,
       config,
@@ -139,7 +121,7 @@ const handleApcMessage = (
 
 const keepSendingAnonymizedApc = async (
   logger: pino.Logger,
-  vehicleProfileMap: VehicleProfileMap,
+  lookup: (uniqueVehicleId: UniqueVehicleId) => VehicleProfile | undefined,
   apcConsumer: Pulsar.Consumer,
   producer: Pulsar.Producer,
   config: AnonymizationConfig,
@@ -151,7 +133,7 @@ const keepSendingAnonymizedApc = async (
     const apcPulsarMessage = await apcConsumer.receive();
     const anonymizedPulsarMessage = handleApcMessage(
       logger,
-      vehicleProfileMap,
+      lookup,
       countCache,
       apcPulsarMessage,
       config,
@@ -171,26 +153,28 @@ const keepSendingAnonymizedApc = async (
   /* eslint-enable no-await-in-loop */
 };
 
-export const keepProcessingMessages = async (
+const keepProcessingMessages = async (
   logger: pino.Logger,
   producer: Pulsar.Producer,
   profileReader: Pulsar.Reader,
   apcConsumer: Pulsar.Consumer,
   config: AnonymizationConfig,
 ): Promise<void> => {
-  // FIXME: add later
-  // const vehicleProfileMap = await formInitialProfile(logger, profileReader);
-  const { vehicleProfileMap } = config;
+  const { isInitialProfileReadingRequired, profileCollectionBase } = config;
+  const { lookup, update } = createVehicleProfileSearch(
+    logger,
+    profileCollectionBase,
+  );
+  if (isInitialProfileReadingRequired) {
+    const message = await getLatestMessage(profileReader);
+    update(message);
+  }
   const promises = [
-    keepUpdatingProfiles(logger, vehicleProfileMap, profileReader),
-    keepSendingAnonymizedApc(
-      logger,
-      vehicleProfileMap,
-      apcConsumer,
-      producer,
-      config,
-    ),
+    keepUpdatingProfiles(update, profileReader),
+    keepSendingAnonymizedApc(logger, lookup, apcConsumer, producer, config),
   ];
   // We expect both promises to stay pending.
   await Promise.any(promises);
 };
+
+export default keepProcessingMessages;
