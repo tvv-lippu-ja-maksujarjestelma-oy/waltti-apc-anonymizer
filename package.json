@@ -56,7 +56,7 @@
     "@stdlib/blas-ext-base-gcusumkbn2": "^0.1.0",
     "csv-parse": "^5.5.3",
     "pino": "^8.16.2",
-    "pulsar-client": "^1.9.0"
+    "pulsar-client": "^1.10.0"
   },
   "jest": {
     "preset": "ts-jest/presets/js-with-ts",
