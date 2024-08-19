@@ -53,7 +53,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@stdlib/blas-ext-base-gcusumkbn2": "^0.2.0",
+    "@stdlib/blas-ext-base-gcusumkbn2": "^0.2.2",
     "csv-parse": "^5.5.6",
     "pino": "^8.16.2",
     "pulsar-client": "^1.10.0"
