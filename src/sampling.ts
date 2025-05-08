@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type pino from "pino";
-import type { VehicleProfile } from "./config";
+import type { VehicleProfile } from "./types";
 
 /**
  * Create a cryptographically strong uniform random number in the range [0, 1[.
@@ -12,8 +12,8 @@ export const generateUniformRandom = () => {
   const maxRandomValue = exclusiveUpperBound - 1;
   /**
    * Tested locally that when maxRandomValue is divided by the divisor
-   * incorporating epsilon of at least this value, the quotient is less than
-   * 1.0, as required. We rely on IEEE-754 to ensure that this holds on other
+   * incorporating epsilon of at least 0.02, the quotient is less than 1.0,
+   * as required. We rely on IEEE-754 to ensure that this holds on other
    * computers, as well.
    */
   const empiricallyFoundEpsilon = 0.02;
@@ -42,7 +42,7 @@ export const sample = (
     );
   } else {
     const p = generateUniformRandom();
-    const index = cdfGivenCount.findIndex((elem) => p <= elem);
+    const index = cdfGivenCount.findIndex((elem: number) => p <= elem);
     if (index < 0) {
       logger.error(
         { cdfGivenCount, p, profile },
