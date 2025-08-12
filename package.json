@@ -55,7 +55,7 @@
   "dependencies": {
     "@stdlib/blas-ext-base-gcusumkbn2": "^0.2.0",
     "csv-parse": "^5.5.6",
-    "pino": "^8.16.2",
+    "pino": "^9.8.0",
     "pulsar-client": "^1.14.0"
   },
   "jest": {
