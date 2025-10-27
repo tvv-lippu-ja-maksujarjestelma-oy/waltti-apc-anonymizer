@@ -114,9 +114,7 @@ function invalidValue(typ: any, val: any, key: any, parent: any = ""): never {
   const parentText = parent ? ` on ${parent}` : "";
   const keyText = key ? ` for key "${key}"` : "";
   throw Error(
-    `Invalid value${keyText}${parentText}. Expected ${prettyTyp} but got ${JSON.stringify(
-      val,
-    )}`,
+    `Invalid value${keyText}${parentText}. Expected ${prettyTyp} but got ${JSON.stringify(val)}`,
   );
 }
 
@@ -249,10 +247,10 @@ function transform(
     return typ.hasOwnProperty("unionMembers")
       ? transformUnion(typ.unionMembers, val)
       : typ.hasOwnProperty("arrayItems")
-      ? transformArray(typ.arrayItems, val)
-      : typ.hasOwnProperty("props")
-      ? transformObject(getProps(typ), typ.additional, val)
-      : invalidValue(typ, val, key, parent);
+        ? transformArray(typ.arrayItems, val)
+        : typ.hasOwnProperty("props")
+          ? transformObject(getProps(typ), typ.additional, val)
+          : invalidValue(typ, val, key, parent);
   }
   // Numbers can be parsed by Date but shouldn't be.
   if (typ === Date && typeof val !== "number") return transformDate(val);
