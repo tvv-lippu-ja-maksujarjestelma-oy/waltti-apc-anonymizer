@@ -1,5 +1,6 @@
 import type pino from "pino";
 import Pulsar from "pulsar-client";
+import type { SubscriptionType, InitialPosition } from "pulsar-client";
 import type { MatchedApc } from "./quicktype/matchedApc";
 // FIXME: this is temporary workaround
 // eslint-disable-next-line import/no-cycle
@@ -269,8 +270,8 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
     "PULSAR_APC_CONSUMER_TOPICS_PATTERN",
   );
   const apcSubscription = getRequired("PULSAR_APC_SUBSCRIPTION");
-  const apcSubscriptionType = "Exclusive";
-  const apcSubscriptionInitialPosition = "Earliest";
+  const apcSubscriptionType: SubscriptionType = "Exclusive";
+  const apcSubscriptionInitialPosition: InitialPosition = "Earliest";
   const base = {
     clientConfig: {
       serviceUrl,
