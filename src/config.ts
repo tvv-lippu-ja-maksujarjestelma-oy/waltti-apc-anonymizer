@@ -1,6 +1,7 @@
 import type pino from "pino";
 import Pulsar from "pulsar-client";
 import type { SubscriptionType, InitialPosition } from "pulsar-client";
+import fs from "node:fs";
 import type { MatchedApc } from "./quicktype/matchedApc";
 // FIXME: this is temporary workaround
 // eslint-disable-next-line import/no-cycle
@@ -142,6 +143,87 @@ const getStringMap = (envVariable: string): Map<string, string> => {
   return map;
 };
 
+const getStringMapFromEnvOrFile = (
+  envVariable: string,
+  fileEnvVariable: string,
+): Map<string, string> => {
+  const filePath = getOptional(fileEnvVariable);
+  let text: string;
+  if (filePath != null) {
+    try {
+      text = fs.readFileSync(filePath, { encoding: "utf8" });
+    } catch (err) {
+      throw new Error(
+        `${fileEnvVariable} points to a file that cannot be read: ${String(err)}`,
+      );
+    }
+  } else {
+    text = getRequired(envVariable);
+  }
+  // Parse JSON only.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const parsed = JSON.parse(text);
+  // Normalize accepted shapes into [key, value][]:
+  // 1) Array of [string, string]
+  // 2) Object { [key: string]: string }
+  // 3) Object { profiles: { [key: string]: string } }
+  let entries: Array<[string, string]> | undefined;
+  if (Array.isArray(parsed)) {
+    entries = parsed as Array<[string, string]>;
+  } else if (
+    parsed != null &&
+    typeof parsed === "object" &&
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    (parsed as Record<string, unknown>)["profiles"] != null &&
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    typeof (parsed as Record<string, unknown>)["profiles"] === "object"
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const profiles = (parsed as Record<string, unknown>)["profiles"] as Record<
+      string,
+      string
+    >;
+    entries = Object.entries(profiles);
+  } else if (parsed != null && typeof parsed === "object") {
+    const obj = parsed as Record<string, string>;
+    entries = Object.entries(obj);
+  }
+  if (entries == null) {
+    throw new Error(
+      `${
+        filePath != null ? fileEnvVariable : envVariable
+      } must be an array of [string, string] or an object mapping strings to strings, optionally under 'profiles'.`,
+    );
+  }
+  const map = new Map<string, string>(entries);
+  if (map.size < 1) {
+    throw new Error(
+      `${
+        filePath != null ? fileEnvVariable : envVariable
+      } must have at least one array entry in the form of [string, string].`,
+    );
+  }
+  if (Array.isArray(parsed)) {
+    if (map.size !== (parsed as Array<[string, string]>).length) {
+      throw new Error(
+        `${filePath != null ? fileEnvVariable : envVariable} must have each key only once.`,
+      );
+    }
+  }
+  if (
+    Array.from(map.entries())
+      .flat(1)
+      .some((x) => typeof x !== "string")
+  ) {
+    throw new Error(
+      `${
+        filePath != null ? fileEnvVariable : envVariable
+      } must contain only strings in the form of [string, string].`,
+    );
+  }
+  return map;
+};
+
 const getAcceptedDeviceMap = (envVariable: string): AcceptedDeviceMap => {
   const stringMap = getStringMap(envVariable);
   Array.from(stringMap.keys()).forEach((key) => {
@@ -159,14 +241,17 @@ const getAcceptedDeviceMap = (envVariable: string): AcceptedDeviceMap => {
   return stringMap as AcceptedDeviceMap;
 };
 
-const getVehicleProfileMap = (envVariable: string): VehicleProfileMap => {
-  const profiles = getStringMap(envVariable);
+const getVehicleProfileMap = (): VehicleProfileMap => {
+  const profiles = getStringMapFromEnvOrFile(
+    "VEHICLE_PROFILE_MAP",
+    "VEHICLE_PROFILE_MAP_FILE",
+  );
   return createProfileMap({ profiles: Object.fromEntries(profiles.entries()) });
 };
 
 const getAnonymizationConfig = (): AnonymizationConfig => {
   const feedPublisherWalttiAuthorityMap = getStringMap("AUTHORITY_MAP");
-  const vehicleProfileMap = getVehicleProfileMap("VEHICLE_PROFILE_MAP");
+  const vehicleProfileMap = getVehicleProfileMap();
   const acceptedDeviceMap = getAcceptedDeviceMap("ACCEPTED_DEVICE_MAP");
   return {
     feedPublisherWalttiAuthorityMap,
