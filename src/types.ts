@@ -82,7 +82,7 @@ export interface PulsarOauth2Config {
 }
 
 export interface PulsarConfig {
-  oauth2Config: PulsarOauth2Config;
+  oauth2Config?: PulsarOauth2Config;
   clientConfig: Pulsar.ClientConfig;
   producerConfig: Pulsar.ProducerConfig;
   profileReaderConfig: Pulsar.ReaderConfig;
