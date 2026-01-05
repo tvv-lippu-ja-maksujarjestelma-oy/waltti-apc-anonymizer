@@ -25,6 +25,83 @@ export const updateMap = <K, V>(
   newContents.forEach((value, key) => map.set(key, value));
 };
 
+export const parseProfileMessageToCollection = (
+  logger: pino.Logger,
+  profileCollectionDataString: string,
+): profileCollection.ProfileCollection | undefined => {
+  try {
+    return profileCollection.Convert.toProfileCollection(
+      profileCollectionDataString,
+    );
+  } catch (err) {
+    // Profiler-format compatibility:
+    // The vehicle anonymization profiler publishes a message with
+    // { vehicleModels, modelProfiles } where each vehicle maps to a model key,
+    // and the model key maps to the CSV profile string. Convert that into the
+    // ProfileCollection shape expected by the anonymizer.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const parsed = JSON.parse(profileCollectionDataString) as unknown;
+      if (parsed != null && typeof parsed === "object") {
+        const obj = parsed as Record<string, unknown>;
+        const vehicleModelsUnknown = obj["vehicleModels"];
+        const modelProfilesUnknown = obj["modelProfiles"];
+
+        const isRecord = (x: unknown): x is Record<string, unknown> =>
+          x != null && typeof x === "object" && !Array.isArray(x);
+
+        if (isRecord(vehicleModelsUnknown) && isRecord(modelProfilesUnknown)) {
+          const vehicleModels = vehicleModelsUnknown;
+          const modelProfiles = modelProfilesUnknown;
+          const profiles = Object.entries(vehicleModels).reduce(
+            (acc, [uniqueVehicleId, modelKeyUnknown]) => {
+              if (
+                typeof modelKeyUnknown !== "string" ||
+                modelKeyUnknown === ""
+              ) {
+                logger.warn(
+                  { uniqueVehicleId, modelKey: modelKeyUnknown },
+                  "Invalid vehicle model key in profile message",
+                );
+                return acc;
+              }
+              const csvUnknown = modelProfiles[modelKeyUnknown];
+              if (typeof csvUnknown === "string" && csvUnknown.length > 0) {
+                acc[uniqueVehicleId] = csvUnknown;
+              } else {
+                logger.warn(
+                  { uniqueVehicleId, modelKey: modelKeyUnknown },
+                  "No CSV profile found for vehicle model",
+                );
+              }
+              return acc;
+            },
+            {} as Record<string, string>,
+          );
+          const schemaVersion =
+            typeof obj["schemaVersion"] === "string"
+              ? obj["schemaVersion"]
+              : undefined;
+          return schemaVersion != null
+            ? { profiles, schemaVersion }
+            : { profiles };
+        }
+      }
+      return undefined;
+    } catch (fallbackErr) {
+      logger.error(
+        {
+          err,
+          fallbackErr,
+          profileCollectionDataString,
+        },
+        "Could not parse profile message",
+      );
+      return undefined;
+    }
+  }
+};
+
 const updateProfiles = async (
   logger: pino.Logger,
   vehicleProfileMap: VehicleProfileMap,
@@ -34,23 +111,10 @@ const updateProfiles = async (
   const profileCollectionDataString = profileCollectionPulsarMessage
     .getData()
     .toString("utf8");
-  let collection;
-  try {
-    collection = profileCollection.Convert.toProfileCollection(
-      profileCollectionDataString,
-    );
-  } catch (err) {
-    logger.error(
-      {
-        err,
-        profileCollectionPulsarMessage: JSON.stringify(
-          profileCollectionPulsarMessage,
-        ),
-        profileCollectionDataString,
-      },
-      "Could not parse profileCollectionPulsarMessage",
-    );
-  }
+  const collection = parseProfileMessageToCollection(
+    logger,
+    profileCollectionDataString,
+  );
   if (collection != null) {
     let newVehicleProfileMap;
     try {
@@ -64,20 +128,24 @@ const updateProfiles = async (
   }
 };
 
-// FIXME: not needed yet
-// const formInitialProfile = async (
-//   logger: pino.Logger,
-//   profileReader: Pulsar.Reader
-// ): Promise<VehicleProfileMap> => {
-//   const vehicleProfileMap: VehicleProfileMap = new Map();
-//   // Errors are handled in the calling function.
-//   /* eslint-disable no-await-in-loop */
-//   while (vehicleProfileMap.size < 1) {
-//     await updateProfiles(logger, vehicleProfileMap, profileReader);
-//   }
-//   /* eslint-enable no-await-in-loop */
-//   return vehicleProfileMap;
-// };
+const formInitialProfile = async (
+  logger: pino.Logger,
+  vehicleProfileMap: VehicleProfileMap,
+  profileReader: Pulsar.Reader,
+): Promise<void> => {
+  // Drain any existing backlog first so we end up with the latest profile message.
+  // Errors are handled in the calling function.
+  /* eslint-disable no-await-in-loop */
+  while (profileReader.hasNext()) {
+    await updateProfiles(logger, vehicleProfileMap, profileReader);
+  }
+  // Ensure we have at least one profile before processing APC messages; otherwise
+  // we'd start acknowledging input without being able to anonymize correctly.
+  while (vehicleProfileMap.size < 1) {
+    await updateProfiles(logger, vehicleProfileMap, profileReader);
+  }
+  /* eslint-enable no-await-in-loop */
+};
 
 const keepUpdatingProfiles = async (
   logger: pino.Logger,
@@ -178,9 +246,8 @@ export const keepProcessingMessages = async (
   apcConsumer: Pulsar.Consumer,
   config: AnonymizationConfig,
 ): Promise<void> => {
-  // FIXME: add later
-  // const vehicleProfileMap = await formInitialProfile(logger, profileReader);
   const { vehicleProfileMap } = config;
+  await formInitialProfile(logger, vehicleProfileMap, profileReader);
   const promises = [
     keepUpdatingProfiles(logger, vehicleProfileMap, profileReader),
     keepSendingAnonymizedApc(

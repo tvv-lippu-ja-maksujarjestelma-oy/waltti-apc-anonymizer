@@ -1,4 +1,7 @@
-import { updateMap } from "./messageProcessing";
+import {
+  parseProfileMessageToCollection,
+  updateMap,
+} from "./messageProcessing";
 
 describe("updateMap", () => {
   test("Update empty Map", () => {
@@ -27,5 +30,38 @@ describe("updateMap", () => {
     ]);
     updateMap(x, y);
     expect(x).toStrictEqual(y);
+  });
+});
+
+describe("parseProfileMessageToCollection", () => {
+  test("Parses profiler-format message (vehicleModels/modelProfiles)", () => {
+    const logger = {
+      warn: jest.fn(),
+      error: jest.fn(),
+    } as unknown as import("pino").Logger;
+
+    const csvExample = ["passenger_count,EMPTY,FULL", "0,1,0", "1,0,1"].join(
+      "\n",
+    );
+
+    const profilerMessage = {
+      schemaVersion: "1-0-0",
+      vehicleModels: {
+        "fi:jyvaskyla:test-vehicle": "40-35",
+      },
+      modelProfiles: {
+        "40-35": csvExample,
+      },
+    };
+
+    const parsed = parseProfileMessageToCollection(
+      logger,
+      JSON.stringify(profilerMessage),
+    );
+
+    expect(parsed).toBeDefined();
+    expect(parsed?.schemaVersion).toBe("1-0-0");
+    expect(parsed?.profiles["fi:jyvaskyla:test-vehicle"]).toBe(csvExample);
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });

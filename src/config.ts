@@ -350,7 +350,10 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const compressionType = getPulsarCompressionType();
   const profileReaderTopic = getRequired("PULSAR_PROFILE_READER_TOPIC");
   const profileReaderName = getRequired("PULSAR_PROFILE_READER_NAME");
-  const profileReaderStartMessageId = Pulsar.MessageId.latest();
+  // Start from earliest so on restart we can immediately load the latest
+  // already-published profile message (by draining backlog) instead of waiting
+  // for the next profiler run.
+  const profileReaderStartMessageId = Pulsar.MessageId.earliest();
   const apcConsumerTopicsPattern = getRequired(
     "PULSAR_APC_CONSUMER_TOPICS_PATTERN",
   );
