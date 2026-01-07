@@ -13,12 +13,13 @@
  * passenger counting (APC) results.
  */
 export interface ProfileCollection {
-  profiles: { [key: string]: string };
+  modelProfiles: { [key: string]: string };
   /**
    * The SchemaVer version number of the JSON schema that this message follows. A valid value
    * is for example '1-0-0'.
    */
   schemaVersion?: string;
+  vehicleModels: { [key: string]: string };
   [property: string]: any;
 }
 
@@ -217,8 +218,9 @@ function r(name: string) {
 const typeMap: any = {
   ProfileCollection: o(
     [
-      { json: "profiles", js: "profiles", typ: m("") },
+      { json: "modelProfiles", js: "modelProfiles", typ: m("") },
       { json: "schemaVersion", js: "schemaVersion", typ: u(undefined, "") },
+      { json: "vehicleModels", js: "vehicleModels", typ: m("") },
     ],
     "any",
   ),

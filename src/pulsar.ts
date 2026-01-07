@@ -1,5 +1,5 @@
 import Pulsar from "pulsar-client";
-import type { PulsarConfig } from "./config";
+import type { PulsarConfig } from "./types";
 
 export const createPulsarClient = ({
   clientConfig,

@@ -1,27 +1,43 @@
 // FIXME: not needed now
 // import csvParseSync from "csv-parse/sync";
-import createProfileMap from "./profile";
+import pino from "pino";
+import { createProfileMap } from "./vehicleProfile";
+import { VehicleProfileMap } from "./types";
 
 test("Simple CSV", () => {
+  const logger = pino(
+    {
+      name: "waltti-apc-anonymizer-tests",
+      timestamp: pino.stdTimeFunctions.isoTime,
+      level: "debug",
+    },
+    pino.destination({ sync: true }),
+  );
   const collection = {
-    profiles: {
-      "fi:kuopio:1234_567":
+    vehicleModels: {
+      "fi:kuopio:1234_567": "49-77",
+    },
+    modelProfiles: {
+      "49-77":
         "passenger_count,EMPTY,FEW_SEATS_AVAILABLE,FULL\n0,0.5,0.5,0.0\n1,0.0,0.5,0.5",
     },
   };
-  const expectedMap = new Map([
-    [
-      "fi:kuopio:1234_567",
-      {
-        categories: ["EMPTY", "FEW_SEATS_AVAILABLE", "FULL"],
-        cdf: [
-          new Float64Array([0.5, 1.0, 1.0]),
-          new Float64Array([0, 0.5, 1.0]),
-        ],
-      },
-    ],
-  ]);
-  expect(createProfileMap(collection)).toStrictEqual(expectedMap);
+  const expectedMap: VehicleProfileMap = {
+    vehicleModels: new Map([["fi:kuopio:1234_567", "49-77"]]),
+    modelProfiles: new Map([
+      [
+        "49-77",
+        {
+          categories: ["EMPTY", "FEW_SEATS_AVAILABLE", "FULL"],
+          cdf: [
+            new Float64Array([0.5, 1.0, 1.0]),
+            new Float64Array([0, 0.5, 1.0]),
+          ],
+        },
+      ],
+    ]),
+  };
+  expect(createProfileMap(logger, collection)).toStrictEqual(expectedMap);
 });
 
 /* eslint-disable jest/no-commented-out-tests */

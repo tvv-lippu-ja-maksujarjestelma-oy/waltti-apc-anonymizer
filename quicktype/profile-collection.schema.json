@@ -9,7 +9,16 @@
       "type": "string",
       "minLength": 5
     },
-    "profiles": {
+    "vehicleModels": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^\\d+-\\d+$",
+        "minLength": 1
+      }
+    },
+    "modelProfiles": {
       "type": "object",
       "minProperties": 1,
       "additionalProperties": {
@@ -20,5 +29,5 @@
   },
   "type": "object",
   "additionalProperties": true,
-  "required": ["profiles"]
+  "required": ["vehicleModels", "modelProfiles"]
 }
