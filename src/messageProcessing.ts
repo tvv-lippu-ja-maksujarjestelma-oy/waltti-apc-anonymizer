@@ -62,13 +62,24 @@ const getLatestMessage = async (
 };
 
 const keepUpdatingProfiles = async (
+  logger: pino.Logger,
   update: (message: Pulsar.Message) => void,
   profileReader: Pulsar.Reader,
 ) => {
+  logger.info("Starting profile update loop");
   // Errors are handled in the calling function.
   /* eslint-disable no-await-in-loop */
   for (;;) {
+    logger.debug("Waiting for next profile message...");
     const message = await profileReader.readNext();
+    logger.info(
+      {
+        messageId: message.getMessageId().toString(),
+        eventTimestamp: message.getEventTimestamp(),
+        dataSize: message.getData().length,
+      },
+      "Received profile message",
+    );
     update(message);
   }
   /* eslint-enable no-await-in-loop */
@@ -127,10 +138,15 @@ const keepSendingAnonymizedApc = async (
   config: AnonymizationConfig,
 ) => {
   const countCache: VehiclePassengerCountMap = new Map();
+  logger.info("Starting APC message processing loop");
+  let messageCount = 0;
+  let producedCount = 0;
+  let skippedCount = 0;
   // Errors are handled in the calling function.
   /* eslint-disable no-await-in-loop */
   for (;;) {
     const apcPulsarMessage = await apcConsumer.receive();
+    messageCount += 1;
     const anonymizedPulsarMessage = handleApcMessage(
       logger,
       lookup,
@@ -139,6 +155,7 @@ const keepSendingAnonymizedApc = async (
       config,
     );
     if (anonymizedPulsarMessage != null) {
+      producedCount += 1;
       // In case of an error, exit via the listener on unhandledRejection.
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       producer.send(anonymizedPulsarMessage).then(() => {
@@ -147,7 +164,15 @@ const keepSendingAnonymizedApc = async (
         apcConsumer.acknowledge(apcPulsarMessage).then(() => {});
       });
     } else {
+      skippedCount += 1;
       await apcConsumer.acknowledge(apcPulsarMessage);
+    }
+    // Log progress every 100 messages
+    if (messageCount % 100 === 0) {
+      logger.info(
+        { messageCount, producedCount, skippedCount },
+        "APC message processing progress",
+      );
     }
   }
   /* eslint-enable no-await-in-loop */
@@ -170,7 +195,7 @@ const keepProcessingMessages = async (
     update(message);
   }
   const promises = [
-    keepUpdatingProfiles(update, profileReader),
+    keepUpdatingProfiles(logger, update, profileReader),
     keepSendingAnonymizedApc(logger, lookup, apcConsumer, producer, config),
   ];
   // We expect both promises to stay pending.

@@ -142,8 +142,18 @@ export const createVehicleProfileSearch = (
     vehicleModels: new Map(initialBase.vehicleModels),
     modelProfiles: new Map(initialBase.modelProfiles),
   };
-  let vehicleModels: VehicleModelMap;
-  let modelProfiles: ModelProfileMap;
+  // Initialize from baseMap to avoid undefined errors if lookup is called
+  // before update. These will be replaced when update() is called.
+  let vehicleModels: VehicleModelMap = new Map(initialBase.vehicleModels);
+  let modelProfiles: ModelProfileMap = new Map(initialBase.modelProfiles);
+
+  logger.info(
+    {
+      initialVehicleCount: vehicleModels.size,
+      initialModelCount: modelProfiles.size,
+    },
+    "Initialized vehicle profile search",
+  );
 
   const lookup = (
     uniqueVehicleId: UniqueVehicleId,
@@ -153,6 +163,15 @@ export const createVehicleProfileSearch = (
     if (model != null) {
       result = modelProfiles.get(model);
     }
+    logger.debug(
+      {
+        uniqueVehicleId,
+        model,
+        hasProfile: result != null,
+        availableVehicleCount: vehicleModels.size,
+      },
+      "Vehicle profile lookup",
+    );
     return result;
   };
 
@@ -206,6 +225,17 @@ export const createVehicleProfileSearch = (
         modelProfiles = mergeMaps(
           baseMap.modelProfiles,
           newVehicleProfileMap.modelProfiles,
+        );
+        // Log the vehicle IDs that are now available for lookup
+        const vehicleIds = Array.from(vehicleModels.keys());
+        logger.debug(
+          {
+            vehicleCount: vehicleModels.size,
+            modelCount: modelProfiles.size,
+            vehicleIds: vehicleIds.slice(0, 10), // First 10 for brevity
+            totalVehicleIds: vehicleIds.length,
+          },
+          "Updated vehicle profiles from message",
         );
       }
     }
