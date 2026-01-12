@@ -61,7 +61,7 @@ export interface VehicleProfileMapWithBase {
   base: VehicleProfileMap;
 }
 
-export type AcceptedDeviceMap = Map<UniqueVehicleId, CountingDeviceId>;
+export type AcceptedDeviceMap = Map<UniqueVehicleId, Set<CountingDeviceId>>;
 
 export interface AnonymizationConfig {
   feedPublisherWalttiAuthorityMap: Map<WalttiAuthorityId, FeedPublisherId>;
@@ -87,6 +87,7 @@ export interface PulsarConfig {
   producerConfig: Pulsar.ProducerConfig;
   profileReaderConfig: Pulsar.ReaderConfig;
   apcConsumerConfig: Pulsar.ConsumerConfig;
+  vehicleRegistryConsumerConfig?: Pulsar.ConsumerConfig | undefined;
 }
 
 export interface HealthCheckConfig {

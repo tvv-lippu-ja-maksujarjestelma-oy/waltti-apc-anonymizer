@@ -120,13 +120,6 @@ export const createProfileMap = (
   // }
 };
 
-const removeKeyOverlap = <K, V>(
-  removed: Map<K, V>,
-  remover: Map<K, V>,
-): void => {
-  Array.from(remover.keys()).forEach((key) => removed.delete(key));
-};
-
 const mergeMaps = <K, V>(map1: Map<K, V>, map2: Map<K, V>): Map<K, V> => {
   return new Map([...map1, ...map2]);
 };
@@ -138,12 +131,8 @@ export const createVehicleProfileSearch = (
   lookup: (uniqueVehicleId: UniqueVehicleId) => VehicleProfile | undefined;
   update: (message: Pulsar.Message) => void;
 } => {
-  const baseMap: VehicleProfileMap = {
-    vehicleModels: new Map(initialBase.vehicleModels),
-    modelProfiles: new Map(initialBase.modelProfiles),
-  };
-  // Initialize from baseMap to avoid undefined errors if lookup is called
-  // before update. These will be replaced when update() is called.
+  // Initialize from initialBase. Each update() call will merge new entries
+  // into this accumulated state.
   let vehicleModels: VehicleModelMap = new Map(initialBase.vehicleModels);
   let modelProfiles: ModelProfileMap = new Map(initialBase.modelProfiles);
 
@@ -209,21 +198,14 @@ export const createVehicleProfileSearch = (
         );
       }
       if (newVehicleProfileMap != null) {
-        // If ever baseMap is overridden, the old values should not be used.
-        removeKeyOverlap(
-          baseMap.vehicleModels,
-          newVehicleProfileMap.vehicleModels,
-        );
-        removeKeyOverlap(
-          baseMap.modelProfiles,
-          newVehicleProfileMap.modelProfiles,
-        );
+        // Merge new entries into current accumulated state.
+        // New entries take precedence over existing ones.
         vehicleModels = mergeMaps(
-          baseMap.vehicleModels,
+          vehicleModels,
           newVehicleProfileMap.vehicleModels,
         );
         modelProfiles = mergeMaps(
-          baseMap.modelProfiles,
+          modelProfiles,
           newVehicleProfileMap.modelProfiles,
         );
         // Log the vehicle IDs that are now available for lookup

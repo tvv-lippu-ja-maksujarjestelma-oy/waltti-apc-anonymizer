@@ -166,39 +166,33 @@ export const anonymize = (
         "We do not have a vehicle profile for this vehicle. We will probably have one later. Meanwhile the data from this vehicle is skipped.",
       );
     } else {
-      const acceptedCountingDeviceId = acceptedDeviceMap.get(uniqueVehicleId);
-      if (
-        acceptedCountingDeviceId != null &&
-        acceptedCountingDeviceId !== matchedApcMessage.countingDeviceId
-      ) {
+      const acceptedDeviceIds = acceptedDeviceMap.get(uniqueVehicleId);
+      const messageDeviceId = matchedApcMessage.countingDeviceId;
+      const isDeviceAccepted =
+        acceptedDeviceIds == null || acceptedDeviceIds.has(messageDeviceId);
+
+      if (!isDeviceAccepted) {
         logger.debug(
           {
             uniqueVehicleId,
             matchedApcMessage: redactCounts(matchedApcMessage),
-            countingDeviceId: matchedApcMessage.countingDeviceId,
-            acceptedCountingDeviceId,
+            countingDeviceId: messageDeviceId,
+            acceptedDeviceIds: Array.from(acceptedDeviceIds ?? []),
           },
-          "There are multiple counting systems in the vehicle. This is not the one preferred for publishing. Skip the message.",
+          "Counting device not in accepted list for this vehicle. Skip the message.",
         );
-      }
-      if (matchedApcMessage.countQuality !== matchedApc.CountQuality.Regular) {
-        logger.warn(
-          {
-            uniqueVehicleId,
-            matchedApcMessage: redactCounts(matchedApcMessage),
-          },
-          "The count quality is not regular. We will use it anyway.",
-        );
-      }
-      /**
-       * As there are only a few vehicles with more than one counting device,
-       * the map contains only those vehicles. If a vehicle is not in the map,
-       * the device is accepted for publishing.
-       */
-      if (
-        acceptedCountingDeviceId == null ||
-        acceptedCountingDeviceId === matchedApcMessage.countingDeviceId
-      ) {
+      } else {
+        if (
+          matchedApcMessage.countQuality !== matchedApc.CountQuality.Regular
+        ) {
+          logger.warn(
+            {
+              uniqueVehicleId,
+              matchedApcMessage: redactCounts(matchedApcMessage),
+            },
+            "The count quality is not regular. We will use it anyway.",
+          );
+        }
         const currentSum = getCountAndUpdateCache(
           countCache,
           uniqueVehicleId,
