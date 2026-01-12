@@ -25,6 +25,7 @@ const exitGracefully = async (
   producer?: Pulsar.Producer,
   profileReader?: Pulsar.Reader,
   apcConsumer?: Pulsar.Consumer,
+  vehicleRegistryConsumer?: Pulsar.Consumer,
 ) => {
   if (exitError) {
     logger.fatal(exitError);
@@ -62,6 +63,17 @@ const exitGracefully = async (
     logger.error(
       { err },
       "Something went wrong when closing vehicle anonymization profile Pulsar reader",
+    );
+  }
+  try {
+    if (vehicleRegistryConsumer) {
+      logger.info("Close vehicle registry Pulsar consumer");
+      await vehicleRegistryConsumer.close();
+    }
+  } catch (err) {
+    logger.error(
+      { err },
+      "Something went wrong when closing vehicle registry Pulsar consumer",
     );
   }
   try {
@@ -119,6 +131,7 @@ const exitGracefully = async (
     let producer: Pulsar.Producer;
     let profileReader: Pulsar.Reader;
     let apcConsumer: Pulsar.Consumer;
+    let vehicleRegistryConsumer: Pulsar.Consumer | undefined;
 
     const exitHandler = (exitCode: number, exitError?: Error) => {
       // Exit next.
@@ -133,6 +146,7 @@ const exitGracefully = async (
         producer,
         profileReader,
         apcConsumer,
+        vehicleRegistryConsumer,
       );
       /* eslint-enable @typescript-eslint/no-floating-promises */
     };
@@ -169,6 +183,13 @@ const exitGracefully = async (
         client,
         config.pulsar.apcConsumerConfig,
       );
+      if (config.pulsar.vehicleRegistryConsumerConfig) {
+        logger.info("Create vehicle registry Pulsar consumer");
+        vehicleRegistryConsumer = await createPulsarConsumer(
+          client,
+          config.pulsar.vehicleRegistryConsumerConfig,
+        );
+      }
       logger.info("Set health check status to OK");
       setHealthOk(true);
       logger.info("Keep processing messages");
@@ -178,6 +199,7 @@ const exitGracefully = async (
         profileReader,
         apcConsumer,
         config.anonymization,
+        vehicleRegistryConsumer,
       );
     } catch (err) {
       exitHandler(1, transformUnknownToError(err));

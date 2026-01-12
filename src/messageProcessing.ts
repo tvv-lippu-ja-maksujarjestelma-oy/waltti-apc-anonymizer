@@ -10,6 +10,7 @@ import * as anonymizedApc from "./quicktype/anonymizedApc";
 import * as matchedApc from "./quicktype/matchedApc";
 import { anonymize } from "./anonymization";
 import { createVehicleProfileSearch } from "./vehicleProfile";
+import { createVehicleRegistryHandler } from "./vehicleRegistry";
 
 /**
  * Get the latest message with the reader.
@@ -81,6 +82,32 @@ const keepUpdatingProfiles = async (
       "Received profile message",
     );
     update(message);
+  }
+  /* eslint-enable no-await-in-loop */
+};
+
+const keepUpdatingVehicleRegistry = async (
+  logger: pino.Logger,
+  update: (message: Pulsar.Message) => void,
+  vehicleRegistryConsumer: Pulsar.Consumer,
+) => {
+  logger.info("Starting vehicle registry update loop");
+  // Errors are handled in the calling function.
+  /* eslint-disable no-await-in-loop */
+  for (;;) {
+    logger.debug("Waiting for next vehicle registry message...");
+    const message = await vehicleRegistryConsumer.receive();
+    logger.info(
+      {
+        messageId: message.getMessageId().toString(),
+        eventTimestamp: message.getEventTimestamp(),
+        topic: message.getTopicName(),
+        dataSize: message.getData().length,
+      },
+      "Received vehicle registry message",
+    );
+    update(message);
+    await vehicleRegistryConsumer.acknowledge(message);
   }
   /* eslint-enable no-await-in-loop */
 };
@@ -161,7 +188,7 @@ const keepSendingAnonymizedApc = async (
       producer.send(anonymizedPulsarMessage).then(() => {
         // In case of an error, exit via the listener on unhandledRejection.
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        apcConsumer.acknowledge(apcPulsarMessage).then(() => {});
+        apcConsumer.acknowledge(apcPulsarMessage);
       });
     } else {
       skippedCount += 1;
@@ -184,8 +211,14 @@ const keepProcessingMessages = async (
   profileReader: Pulsar.Reader,
   apcConsumer: Pulsar.Consumer,
   config: AnonymizationConfig,
+  vehicleRegistryConsumer?: Pulsar.Consumer,
 ): Promise<void> => {
-  const { isInitialProfileReadingRequired, profileCollectionBase } = config;
+  const {
+    isInitialProfileReadingRequired,
+    profileCollectionBase,
+    acceptedDeviceMap,
+    feedPublisherWalttiAuthorityMap,
+  } = config;
   const { lookup, update } = createVehicleProfileSearch(
     logger,
     profileCollectionBase,
@@ -194,11 +227,38 @@ const keepProcessingMessages = async (
     const message = await getLatestMessage(profileReader);
     update(message);
   }
-  const promises = [
+
+  const promises: Promise<void>[] = [
     keepUpdatingProfiles(logger, update, profileReader),
     keepSendingAnonymizedApc(logger, lookup, apcConsumer, producer, config),
   ];
-  // We expect both promises to stay pending.
+
+  // If vehicle registry consumer is configured, add the update loop
+  if (vehicleRegistryConsumer) {
+    const { update: updateVehicleRegistry } = createVehicleRegistryHandler(
+      logger,
+      acceptedDeviceMap,
+      feedPublisherWalttiAuthorityMap,
+    );
+    promises.push(
+      keepUpdatingVehicleRegistry(
+        logger,
+        updateVehicleRegistry,
+        vehicleRegistryConsumer,
+      ),
+    );
+    logger.info(
+      { initialMapSize: acceptedDeviceMap.size },
+      "Vehicle registry consumer configured, acceptedDeviceMap will be updated dynamically",
+    );
+  } else {
+    logger.info(
+      { mapSize: acceptedDeviceMap.size },
+      "No vehicle registry consumer configured, using static acceptedDeviceMap",
+    );
+  }
+
+  // We expect all promises to stay pending.
   await Promise.any(promises);
 };
 

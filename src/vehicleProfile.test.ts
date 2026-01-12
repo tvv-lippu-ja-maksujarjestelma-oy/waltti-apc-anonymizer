@@ -1,8 +1,28 @@
 // FIXME: not needed now
 // import csvParseSync from "csv-parse/sync";
 import pino from "pino";
-import { createProfileMap } from "./vehicleProfile";
-import { VehicleProfileMap } from "./types";
+import type Pulsar from "pulsar-client";
+import { createProfileMap, createVehicleProfileSearch } from "./vehicleProfile";
+import { VehicleProfileMap, UniqueVehicleId } from "./types";
+
+const createTestLogger = () =>
+  pino(
+    {
+      name: "waltti-apc-anonymizer-tests",
+      timestamp: pino.stdTimeFunctions.isoTime,
+      level: "silent", // Suppress logs during tests
+    },
+    pino.destination({ sync: true }),
+  );
+
+// Helper to create a mock Pulsar message with proper typing
+const createMockMessage = (data: object): Pulsar.Message =>
+  ({
+    getData: () => Buffer.from(JSON.stringify(data), "utf8"),
+    getEventTimestamp: () => Date.now(),
+    getProperties: () => ({}),
+    getMessageId: () => ({ toString: () => "test-message-id" }),
+  }) as Pulsar.Message;
 
 test("Simple CSV", () => {
   const logger = pino(
@@ -38,6 +58,189 @@ test("Simple CSV", () => {
     ]),
   };
   expect(createProfileMap(logger, collection)).toStrictEqual(expectedMap);
+});
+
+describe("createVehicleProfileSearch", () => {
+  const csvProfile1 =
+    "passenger_count,EMPTY,FEW_SEATS_AVAILABLE,FULL\n0,0.5,0.5,0.0\n1,0.0,0.5,0.5";
+  const csvProfile2 =
+    "passenger_count,EMPTY,FEW_SEATS_AVAILABLE,FULL\n0,0.8,0.2,0.0\n1,0.2,0.6,0.2";
+
+  test("lookup returns profile from initial base", () => {
+    const logger = createTestLogger();
+    const initialBase: VehicleProfileMap = {
+      vehicleModels: new Map([["fi:kuopio:vehicle1", "model-A"]]),
+      modelProfiles: new Map([
+        [
+          "model-A",
+          {
+            categories: ["EMPTY", "FULL"],
+            cdf: [new Float64Array([0.5, 1.0])],
+          },
+        ],
+      ]),
+    };
+
+    const { lookup } = createVehicleProfileSearch(logger, initialBase);
+
+    const profile = lookup("fi:kuopio:vehicle1" as UniqueVehicleId);
+    expect(profile).toBeDefined();
+    expect(profile?.categories).toEqual(["EMPTY", "FULL"]);
+  });
+
+  test("lookup returns undefined for unknown vehicle", () => {
+    const logger = createTestLogger();
+    const initialBase: VehicleProfileMap = {
+      vehicleModels: new Map([["fi:kuopio:vehicle1", "model-A"]]),
+      modelProfiles: new Map([
+        [
+          "model-A",
+          {
+            categories: ["EMPTY", "FULL"],
+            cdf: [new Float64Array([0.5, 1.0])],
+          },
+        ],
+      ]),
+    };
+
+    const { lookup } = createVehicleProfileSearch(logger, initialBase);
+
+    const profile = lookup("fi:kuopio:unknown" as UniqueVehicleId);
+    expect(profile).toBeUndefined();
+  });
+
+  test("update adds new vehicles to accumulated state", () => {
+    const logger = createTestLogger();
+    const initialBase: VehicleProfileMap = {
+      vehicleModels: new Map([["fi:kuopio:vehicle1", "model-A"]]),
+      modelProfiles: new Map([
+        [
+          "model-A",
+          {
+            categories: ["EMPTY", "FULL"],
+            cdf: [new Float64Array([0.5, 1.0])],
+          },
+        ],
+      ]),
+    };
+
+    const { lookup, update } = createVehicleProfileSearch(logger, initialBase);
+
+    // Update with a new vehicle
+    const message = createMockMessage({
+      vehicleModels: { "fi:kuopio:vehicle2": "model-B" },
+      modelProfiles: { "model-B": csvProfile1 },
+    });
+    update(message);
+
+    // Both vehicles should now be available
+    expect(lookup("fi:kuopio:vehicle1" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:kuopio:vehicle2" as UniqueVehicleId)).toBeDefined();
+  });
+
+  test("multiple updates accumulate profiles correctly", () => {
+    const logger = createTestLogger();
+    const initialBase: VehicleProfileMap = {
+      vehicleModels: new Map(),
+      modelProfiles: new Map(),
+    };
+
+    const { lookup, update } = createVehicleProfileSearch(logger, initialBase);
+
+    // First update adds vehicle1
+    const message1 = createMockMessage({
+      vehicleModels: { "fi:kuopio:vehicle1": "model-A" },
+      modelProfiles: { "model-A": csvProfile1 },
+    });
+    update(message1);
+
+    expect(lookup("fi:kuopio:vehicle1" as UniqueVehicleId)).toBeDefined();
+
+    // Second update adds vehicle2 (without vehicle1)
+    const message2 = createMockMessage({
+      vehicleModels: { "fi:kuopio:vehicle2": "model-B" },
+      modelProfiles: { "model-B": csvProfile2 },
+    });
+    update(message2);
+
+    // BOTH vehicles should still be available (this was the bug)
+    expect(lookup("fi:kuopio:vehicle1" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:kuopio:vehicle2" as UniqueVehicleId)).toBeDefined();
+  });
+
+  test("update overwrites existing vehicle with new profile", () => {
+    const logger = createTestLogger();
+    const initialBase: VehicleProfileMap = {
+      vehicleModels: new Map([["fi:kuopio:vehicle1", "model-A"]]),
+      modelProfiles: new Map([
+        [
+          "model-A",
+          {
+            categories: ["OLD_CATEGORY"],
+            cdf: [new Float64Array([1.0])],
+          },
+        ],
+      ]),
+    };
+
+    const { lookup, update } = createVehicleProfileSearch(logger, initialBase);
+
+    // Verify initial profile
+    const initialProfile = lookup("fi:kuopio:vehicle1" as UniqueVehicleId);
+    expect(initialProfile?.categories).toEqual(["OLD_CATEGORY"]);
+
+    // Update with new profile for same vehicle model
+    const message = createMockMessage({
+      vehicleModels: { "fi:kuopio:vehicle1": "model-A" },
+      modelProfiles: { "model-A": csvProfile1 },
+    });
+    update(message);
+
+    // Profile should be updated
+    const updatedProfile = lookup("fi:kuopio:vehicle1" as UniqueVehicleId);
+    expect(updatedProfile?.categories).toEqual([
+      "EMPTY",
+      "FEW_SEATS_AVAILABLE",
+      "FULL",
+    ]);
+  });
+
+  test("three sequential updates all accumulate", () => {
+    const logger = createTestLogger();
+    const initialBase: VehicleProfileMap = {
+      vehicleModels: new Map(),
+      modelProfiles: new Map(),
+    };
+
+    const { lookup, update } = createVehicleProfileSearch(logger, initialBase);
+
+    // Three separate updates
+    update(
+      createMockMessage({
+        vehicleModels: { "fi:city1:v1": "m1" },
+        modelProfiles: { m1: csvProfile1 },
+      }),
+    );
+
+    update(
+      createMockMessage({
+        vehicleModels: { "fi:city2:v2": "m2" },
+        modelProfiles: { m2: csvProfile1 },
+      }),
+    );
+
+    update(
+      createMockMessage({
+        vehicleModels: { "fi:city3:v3": "m3" },
+        modelProfiles: { m3: csvProfile1 },
+      }),
+    );
+
+    // All three vehicles should be available
+    expect(lookup("fi:city1:v1" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:city2:v2" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:city3:v3" as UniqueVehicleId)).toBeDefined();
+  });
 });
 
 /* eslint-disable jest/no-commented-out-tests */

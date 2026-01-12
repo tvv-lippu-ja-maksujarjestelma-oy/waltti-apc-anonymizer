@@ -8,6 +8,7 @@ import {
   Config,
   PulsarConfig,
   PulsarOauth2Config,
+  UniqueVehicleId,
   VehicleProfileMap,
 } from "./types";
 import { createProfileMap } from "./vehicleProfile";
@@ -65,10 +66,29 @@ const getStringMap = (envVariable: string): Map<string, string> => {
   return map;
 };
 
-const getAcceptedDeviceMap = (envVariable: string): AcceptedDeviceMap => {
-  const stringMap = getStringMap(envVariable);
-  Array.from(stringMap.keys()).forEach((key) => {
-    const parts = key.split(":");
+const getOptionalAcceptedDeviceMap = (
+  envVariable: string,
+): AcceptedDeviceMap => {
+  const stringValue = getOptional(envVariable);
+  if (stringValue == null) {
+    // Return empty map - will be populated dynamically from vehicle-catalogue
+    return new Map() as AcceptedDeviceMap;
+  }
+  // Parse the JSON if provided (for backwards compatibility)
+  // Format: [["vehicleId", "deviceId"], ...]
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const keyValueList = JSON.parse(stringValue);
+  if (!Array.isArray(keyValueList)) {
+    throw new Error(`${envVariable} must be an array`);
+  }
+  // Convert to Map<UniqueVehicleId, Set<CountingDeviceId>>
+  const map: AcceptedDeviceMap = new Map();
+  keyValueList.forEach((entry: unknown) => {
+    if (!Array.isArray(entry) || entry.length !== 2) {
+      throw new Error(`${envVariable} entries must be [string, string] tuples`);
+    }
+    const [vehicleId, deviceId] = entry as [string, string];
+    const parts = vehicleId.split(":");
     if (
       parts.length < 2 ||
       parts.slice(0, -1).join("").length < 1 ||
@@ -78,8 +98,15 @@ const getAcceptedDeviceMap = (envVariable: string): AcceptedDeviceMap => {
         `${envVariable} must have a colon separating non-empty strings in the form of [string:string, string].`,
       );
     }
+    // Add device to the set for this vehicle (supports multiple devices per vehicle)
+    const existingSet = map.get(vehicleId as UniqueVehicleId);
+    if (existingSet != null) {
+      existingSet.add(deviceId);
+    } else {
+      map.set(vehicleId as UniqueVehicleId, new Set([deviceId]));
+    }
   });
-  return stringMap as AcceptedDeviceMap;
+  return map;
 };
 
 const getProfileCollectionBase = (
@@ -109,7 +136,7 @@ const getProfileCollectionBase = (
 
 const getAnonymizationConfig = (logger: pino.Logger): AnonymizationConfig => {
   const feedPublisherWalttiAuthorityMap = getStringMap("AUTHORITY_MAP");
-  const acceptedDeviceMap = getAcceptedDeviceMap("ACCEPTED_DEVICE_MAP");
+  const acceptedDeviceMap = getOptionalAcceptedDeviceMap("ACCEPTED_DEVICE_MAP");
   const profileCollectionBase = getProfileCollectionBase(
     logger,
     "PROFILE_COLLECTION_BASE",
@@ -226,6 +253,17 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const apcSubscription = getRequired("PULSAR_APC_SUBSCRIPTION");
   const apcSubscriptionType: SubscriptionType = "Exclusive";
   const apcSubscriptionInitialPosition: InitialPosition = "Earliest";
+  // Vehicle registry consumer for dynamic ACCEPTED_DEVICE_MAP population
+  // Uses a topics pattern to read from all vehicle catalogue topics
+  const vehicleRegistryConsumerTopicsPattern = getOptional(
+    "PULSAR_VEHICLE_REGISTRY_CONSUMER_TOPICS_PATTERN",
+  );
+  const vehicleRegistrySubscription =
+    getOptional("PULSAR_VEHICLE_REGISTRY_SUBSCRIPTION") ??
+    "anonymizer-vehicle-registry";
+  const vehicleRegistrySubscriptionType: SubscriptionType = "Exclusive";
+  const vehicleRegistrySubscriptionInitialPosition: InitialPosition =
+    "Earliest";
   const base = {
     clientConfig: {
       serviceUrl,
@@ -248,6 +286,15 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
       subscriptionType: apcSubscriptionType,
       subscriptionInitialPosition: apcSubscriptionInitialPosition,
     },
+    vehicleRegistryConsumerConfig: vehicleRegistryConsumerTopicsPattern
+      ? {
+          topicsPattern: vehicleRegistryConsumerTopicsPattern,
+          subscription: vehicleRegistrySubscription,
+          subscriptionType: vehicleRegistrySubscriptionType,
+          subscriptionInitialPosition:
+            vehicleRegistrySubscriptionInitialPosition,
+        }
+      : undefined,
   };
 
   const result = oauth2Config ? { ...base, oauth2Config } : base;
