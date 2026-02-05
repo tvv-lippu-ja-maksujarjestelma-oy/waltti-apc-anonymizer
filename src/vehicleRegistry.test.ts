@@ -41,7 +41,7 @@ describe("updateAcceptedDeviceMap", () => {
     expect(acceptedDeviceMap.size).toBe(1);
     expect(
       acceptedDeviceMap.get("fi:jyvaskyla:6714_518" as UniqueVehicleId),
-    ).toEqual(new Set(["JL518-APC"]));
+    ).toEqual(new Set(["jl518-apc"]));
   });
 
   test("adds all devices for multi-device vehicle", () => {
@@ -63,7 +63,7 @@ describe("updateAcceptedDeviceMap", () => {
     expect(acceptedDeviceMap.size).toBe(1);
     expect(
       acceptedDeviceMap.get("fi:jyvaskyla:6714_520" as UniqueVehicleId),
-    ).toEqual(new Set(["JL520-APC-1", "JL520-APC-2"]));
+    ).toEqual(new Set(["jl520-apc-1", "jl520-apc-2"]));
   });
 
   test("ignores non-PASSENGER_COUNTER equipment", () => {
@@ -85,7 +85,7 @@ describe("updateAcceptedDeviceMap", () => {
     expect(acceptedDeviceMap.size).toBe(1);
     expect(
       acceptedDeviceMap.get("fi:jyvaskyla:6714_521" as UniqueVehicleId),
-    ).toEqual(new Set(["JL521-APC"]));
+    ).toEqual(new Set(["jl521-apc"]));
   });
 
   test("skips vehicle with no PASSENGER_COUNTER equipment", () => {
@@ -139,6 +139,59 @@ describe("updateAcceptedDeviceMap", () => {
     ).toBe(true);
   });
 
+  test("later message with new format overrides earlier message with old format", () => {
+    const acceptedDeviceMap: AcceptedDeviceMap = new Map();
+
+    const oldFormatMessage = createMockMessage(
+      JSON.stringify([
+        {
+          operatorId: "6714",
+          vehicleShortName: "483",
+          equipment: [
+            { id: "6714_483", type: "PASSENGER_COUNTER", apcSystem: "TELIA" },
+          ],
+        },
+      ]),
+    );
+    updateAcceptedDeviceMap(
+      logger,
+      oldFormatMessage,
+      "fi:jyvaskyla",
+      acceptedDeviceMap,
+    );
+
+    expect(
+      acceptedDeviceMap.get("fi:jyvaskyla:6714_483" as UniqueVehicleId),
+    ).toEqual(new Set(["6714_483"]));
+
+    const newFormatMessage = createMockMessage(
+      JSON.stringify([
+        {
+          operatorId: "6714",
+          vehicleShortName: "483",
+          equipment: [
+            {
+              id: "JL483-0009d8066d7c",
+              type: "PASSENGER_COUNTER",
+              apcSystem: "TELIA",
+            },
+          ],
+        },
+      ]),
+    );
+    updateAcceptedDeviceMap(
+      logger,
+      newFormatMessage,
+      "fi:jyvaskyla",
+      acceptedDeviceMap,
+    );
+
+    expect(acceptedDeviceMap.size).toBe(1);
+    expect(
+      acceptedDeviceMap.get("fi:jyvaskyla:6714_483" as UniqueVehicleId),
+    ).toEqual(new Set(["jl483-0009d8066d7c"]));
+  });
+
   test("handles multiple vehicles in one message", () => {
     const acceptedDeviceMap: AcceptedDeviceMap = new Map();
     const vehicleData = JSON.stringify([
@@ -160,10 +213,10 @@ describe("updateAcceptedDeviceMap", () => {
     expect(acceptedDeviceMap.size).toBe(2);
     expect(
       acceptedDeviceMap.get("fi:jyvaskyla:6714_518" as UniqueVehicleId),
-    ).toEqual(new Set(["JL518-APC"]));
+    ).toEqual(new Set(["jl518-apc"]));
     expect(
       acceptedDeviceMap.get("fi:jyvaskyla:6714_519" as UniqueVehicleId),
-    ).toEqual(new Set(["JL519-APC"]));
+    ).toEqual(new Set(["jl519-apc"]));
   });
 
   test("handles invalid JSON gracefully", () => {
@@ -174,6 +227,31 @@ describe("updateAcceptedDeviceMap", () => {
     updateAcceptedDeviceMap(logger, message, "fi:jyvaskyla", acceptedDeviceMap);
 
     expect(acceptedDeviceMap.size).toBe(0);
+  });
+
+  test("adds vehicle with counting system id format and apcSystem", () => {
+    const acceptedDeviceMap: AcceptedDeviceMap = new Map();
+    const vehicleData = JSON.stringify([
+      {
+        operatorId: "6714",
+        vehicleShortName: "476",
+        equipment: [
+          {
+            id: "JL476-0009d80670fc",
+            type: "PASSENGER_COUNTER",
+            apcSystem: "TELIA",
+          },
+        ],
+      },
+    ]);
+    const message = createMockMessage(vehicleData);
+
+    updateAcceptedDeviceMap(logger, message, "fi:jyvaskyla", acceptedDeviceMap);
+
+    expect(acceptedDeviceMap.size).toBe(1);
+    expect(
+      acceptedDeviceMap.get("fi:jyvaskyla:6714_476" as UniqueVehicleId),
+    ).toEqual(new Set(["jl476-0009d80670fc"]));
   });
 });
 
@@ -239,5 +317,34 @@ describe("createVehicleRegistryHandler", () => {
     expect(acceptedDeviceMap.has("fi:kuopio:44517_6" as UniqueVehicleId)).toBe(
       true,
     );
+  });
+
+  test("does not update map when topic has no vehicle-catalogue prefix", () => {
+    const acceptedDeviceMap: AcceptedDeviceMap = new Map();
+
+    const { update } = createVehicleRegistryHandler(
+      logger,
+      acceptedDeviceMap,
+      new Map([
+        ["209", "fi:jyvaskyla"],
+        ["221", "fi:kuopio"],
+      ]),
+    );
+
+    const vehicleData = JSON.stringify([
+      {
+        operatorId: "6714",
+        vehicleShortName: "518",
+        equipment: [{ id: "JL518-APC", type: "PASSENGER_COUNTER" }],
+      },
+    ]);
+    const message = createMockMessage(
+      vehicleData,
+      "persistent://apc-sandbox/source/some-other-topic",
+    );
+
+    update(message);
+
+    expect(acceptedDeviceMap.size).toBe(0);
   });
 });

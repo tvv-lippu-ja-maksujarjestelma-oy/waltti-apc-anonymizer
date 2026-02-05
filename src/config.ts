@@ -99,11 +99,13 @@ const getOptionalAcceptedDeviceMap = (
       );
     }
     // Add device to the set for this vehicle (supports multiple devices per vehicle)
+    // Normalize to lowercase for case-insensitive matching (consistent with vehicleRegistry.ts)
+    const normalizedDeviceId = deviceId.toLowerCase();
     const existingSet = map.get(vehicleId as UniqueVehicleId);
     if (existingSet != null) {
-      existingSet.add(deviceId);
+      existingSet.add(normalizedDeviceId);
     } else {
-      map.set(vehicleId as UniqueVehicleId, new Set([deviceId]));
+      map.set(vehicleId as UniqueVehicleId, new Set([normalizedDeviceId]));
     }
   });
   return map;
