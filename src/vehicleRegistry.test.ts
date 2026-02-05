@@ -160,9 +160,9 @@ describe("updateAcceptedDeviceMap", () => {
       acceptedDeviceMap,
     );
 
-    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_483" as UniqueVehicleId)).toEqual(
-      new Set(["6714_483"]),
-    );
+    expect(
+      acceptedDeviceMap.get("fi:jyvaskyla:6714_483" as UniqueVehicleId),
+    ).toEqual(new Set(["6714_483"]));
 
     const newFormatMessage = createMockMessage(
       JSON.stringify([
