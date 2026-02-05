@@ -51,7 +51,6 @@ export const updateAcceptedDeviceMap = (
   }
 
   // Clear the current map for this feed publisher and rebuild
-  // We only clear entries for this feedPublisherId, preserving others
   const keysToRemove = Array.from(acceptedDeviceMap.keys()).filter((key) =>
     key.startsWith(`${feedPublisherId}:`),
   );
@@ -82,11 +81,11 @@ export const updateAcceptedDeviceMap = (
     );
 
     if (passengerCounters.length > 0) {
-      // Add all PASSENGER_COUNTER device IDs to the set
       const deviceIds = new Set<string>();
       passengerCounters.forEach((counter) => {
         if (counter.id != null) {
-          deviceIds.add(counter.id);
+          // Normalize to lowercase for case-insensitive matching
+          deviceIds.add(counter.id.toLowerCase());
         }
       });
 

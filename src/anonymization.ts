@@ -168,8 +168,9 @@ export const anonymize = (
     } else {
       const acceptedDeviceIds = acceptedDeviceMap.get(uniqueVehicleId);
       const messageDeviceId = matchedApcMessage.countingDeviceId;
+      // Normalize to lowercase for case-insensitive matching
       const isDeviceAccepted =
-        acceptedDeviceIds == null || acceptedDeviceIds.has(messageDeviceId);
+        acceptedDeviceIds == null || acceptedDeviceIds.has(messageDeviceId.toLowerCase());
 
       if (!isDeviceAccepted) {
         logger.debug(
