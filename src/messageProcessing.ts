@@ -12,6 +12,8 @@ import { anonymize } from "./anonymization";
 import { createVehicleProfileSearch } from "./vehicleProfile";
 import { createVehicleRegistryHandler } from "./vehicleRegistry";
 
+const PULSAR_READ_TIMEOUT_MS = 300_000;
+
 /**
  * Get the latest message with the reader.
  *
@@ -72,16 +74,26 @@ const keepUpdatingProfiles = async (
   /* eslint-disable no-await-in-loop */
   for (;;) {
     logger.debug("Waiting for next profile message...");
-    const message = await profileReader.readNext();
-    logger.info(
-      {
-        messageId: message.getMessageId().toString(),
-        eventTimestamp: message.getEventTimestamp(),
-        dataSize: message.getData().length,
-      },
-      "Received profile message",
-    );
-    update(message);
+    let message: Pulsar.Message | undefined;
+    try {
+      message = await profileReader.readNext(PULSAR_READ_TIMEOUT_MS);
+    } catch (err) {
+      logger.warn(
+        { err, readTimeoutMs: PULSAR_READ_TIMEOUT_MS },
+        "Profile reader read failed",
+      );
+    }
+    if (message != null) {
+      logger.info(
+        {
+          messageId: message.getMessageId().toString(),
+          eventTimestamp: message.getEventTimestamp(),
+          dataSize: message.getData().length,
+        },
+        "Received profile message",
+      );
+      update(message);
+    }
   }
   /* eslint-enable no-await-in-loop */
 };
@@ -96,18 +108,28 @@ const keepUpdatingVehicleRegistry = async (
   /* eslint-disable no-await-in-loop */
   for (;;) {
     logger.debug("Waiting for next vehicle registry message...");
-    const message = await vehicleRegistryConsumer.receive();
-    logger.info(
-      {
-        messageId: message.getMessageId().toString(),
-        eventTimestamp: message.getEventTimestamp(),
-        topic: message.getTopicName(),
-        dataSize: message.getData().length,
-      },
-      "Received vehicle registry message",
-    );
-    update(message);
-    await vehicleRegistryConsumer.acknowledge(message);
+    let message: Pulsar.Message | undefined;
+    try {
+      message = await vehicleRegistryConsumer.receive(PULSAR_READ_TIMEOUT_MS);
+    } catch (err) {
+      logger.warn(
+        { err, readTimeoutMs: PULSAR_READ_TIMEOUT_MS },
+        "Vehicle registry consumer receive failed",
+      );
+    }
+    if (message != null) {
+      logger.info(
+        {
+          messageId: message.getMessageId().toString(),
+          eventTimestamp: message.getEventTimestamp(),
+          topic: message.getTopicName(),
+          dataSize: message.getData().length,
+        },
+        "Received vehicle registry message",
+      );
+      update(message);
+      await vehicleRegistryConsumer.acknowledge(message);
+    }
   }
   /* eslint-enable no-await-in-loop */
 };
@@ -172,34 +194,44 @@ const keepSendingAnonymizedApc = async (
   // Errors are handled in the calling function.
   /* eslint-disable no-await-in-loop */
   for (;;) {
-    const apcPulsarMessage = await apcConsumer.receive();
-    messageCount += 1;
-    const anonymizedPulsarMessage = handleApcMessage(
-      logger,
-      lookup,
-      countCache,
-      apcPulsarMessage,
-      config,
-    );
-    if (anonymizedPulsarMessage != null) {
-      producedCount += 1;
-      // In case of an error, exit via the listener on unhandledRejection.
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      producer.send(anonymizedPulsarMessage).then(() => {
+    let apcPulsarMessage: Pulsar.Message | undefined;
+    try {
+      apcPulsarMessage = await apcConsumer.receive(PULSAR_READ_TIMEOUT_MS);
+    } catch (err) {
+      logger.warn(
+        { err, readTimeoutMs: PULSAR_READ_TIMEOUT_MS },
+        "APC consumer receive failed",
+      );
+    }
+    if (apcPulsarMessage != null) {
+      messageCount += 1;
+      const anonymizedPulsarMessage = handleApcMessage(
+        logger,
+        lookup,
+        countCache,
+        apcPulsarMessage,
+        config,
+      );
+      if (anonymizedPulsarMessage != null) {
+        producedCount += 1;
         // In case of an error, exit via the listener on unhandledRejection.
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        apcConsumer.acknowledge(apcPulsarMessage);
-      });
-    } else {
-      skippedCount += 1;
-      await apcConsumer.acknowledge(apcPulsarMessage);
-    }
-    // Log progress every 100 messages
-    if (messageCount % 100 === 0) {
-      logger.info(
-        { messageCount, producedCount, skippedCount },
-        "APC message processing progress",
-      );
+        producer.send(anonymizedPulsarMessage).then(() => {
+          // In case of an error, exit via the listener on unhandledRejection.
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          apcConsumer.acknowledge(apcPulsarMessage);
+        });
+      } else {
+        skippedCount += 1;
+        await apcConsumer.acknowledge(apcPulsarMessage);
+      }
+      // Log progress every 100 messages
+      if (messageCount % 100 === 0) {
+        logger.info(
+          { messageCount, producedCount, skippedCount },
+          "APC message processing progress",
+        );
+      }
     }
   }
   /* eslint-enable no-await-in-loop */
@@ -287,7 +319,7 @@ const keepProcessingMessages = async (
   }
 
   // We expect all promises to stay pending.
-  await Promise.any(promises);
+  await Promise.all(promises);
 };
 
 export default keepProcessingMessages;
