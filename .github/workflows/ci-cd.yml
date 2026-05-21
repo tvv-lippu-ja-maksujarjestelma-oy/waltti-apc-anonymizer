@@ -57,6 +57,17 @@ jobs:
       - name: Check and test inside Docker
         run: |
           docker run --rm "${{ env.IMAGE_NAME }}:${{ env.TEST_STAGE }}"
+      - name: Build production image for smoke test
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          target: "${{ env.PRODUCTION_STAGE }}"
+          tags: "${{ env.IMAGE_NAME }}:${{ env.PRODUCTION_STAGE }}"
+      - name: Smoke test production image
+        run: |
+          docker run --rm --entrypoint node "${{ env.IMAGE_NAME }}:${{ env.PRODUCTION_STAGE }}" \
+            -e "const fs = require('node:fs'); if (!fs.existsSync('/home/node/app/dist/index.js')) { throw new Error('Missing /home/node/app/dist/index.js'); }"
       - name: Login to Docker Hub
         if: ${{ github.ref == 'refs/heads/main' }}
         uses: docker/login-action@v3
