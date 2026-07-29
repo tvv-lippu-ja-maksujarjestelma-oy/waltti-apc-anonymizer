@@ -65,8 +65,11 @@ jobs:
           target: "${{ env.PRODUCTION_STAGE }}"
           tags: "${{ env.IMAGE_NAME }}:${{ env.PRODUCTION_STAGE }}"
       - name: Smoke test production image
+        # Run as the same non-node UID as the Kubernetes securityContext so
+        # that file permission problems (e.g. /home/node mode changes in the
+        # node base image) fail here instead of in the cluster.
         run: |
-          docker run --rm --entrypoint node "${{ env.IMAGE_NAME }}:${{ env.PRODUCTION_STAGE }}" \
+          docker run --rm --user 10001:10001 --entrypoint node "${{ env.IMAGE_NAME }}:${{ env.PRODUCTION_STAGE }}" \
             -e "const fs = require('node:fs'); if (!fs.existsSync('/home/node/app/dist/index.js')) { throw new Error('Missing /home/node/app/dist/index.js'); }"
       - name: Login to Docker Hub
         if: ${{ github.ref == 'refs/heads/main' }}
