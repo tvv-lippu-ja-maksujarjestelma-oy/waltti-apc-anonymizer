@@ -6,8 +6,11 @@ RUN apt-get update \
   && apt-get upgrade --assume-yes \
   && rm -rf /var/lib/apt/lists/*
 
+# Recent node base images ship /home/node with mode 0700. The Kubernetes
+# deployment runs the container as a non-node UID, which then cannot traverse
+# /home/node to reach the app. Restore world traversal explicitly.
 USER node
-RUN mkdir /home/node/app
+RUN chmod go+rx /home/node && mkdir /home/node/app
 WORKDIR /home/node/app
 COPY --chown=node:node ./package.json ./package-lock.json ./
 
@@ -54,8 +57,10 @@ RUN apt-get update \
   'tini' \
   && rm -rf /var/lib/apt/lists/*
 
+# See the note on /home/node permissions above the same command in the base
+# stage.
 USER node
-RUN mkdir /home/node/app
+RUN chmod go+rx /home/node && mkdir /home/node/app
 WORKDIR /home/node/app
 COPY \
   --chown=node:node \
