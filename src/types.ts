@@ -26,9 +26,17 @@ export interface UniqueVehicleJourneyId {
   gtfsrtTripId: MatchedApc["gtfsrtTripId"];
 }
 
+export interface PassengerCountCacheEntry {
+  uniqueVehicleJourneyId: UniqueVehicleJourneyId;
+  passengerCount: PassengerCount;
+  /** Pulsar event timestamp of the latest accumulated message in milliseconds
+   * since the Unix epoch. */
+  eventTimestamp: number;
+}
+
 export type VehiclePassengerCountMap = Map<
   UniqueVehicleId,
-  [UniqueVehicleJourneyId, PassengerCount]
+  PassengerCountCacheEntry
 >;
 
 export type TimezoneName = string;
