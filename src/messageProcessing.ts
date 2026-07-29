@@ -157,11 +157,20 @@ const handleApcMessage = (
     );
   }
   if (apcMessage != null) {
+    // The journey matcher propagates the counting system's event timestamp.
+    // Fall back to the broker-assigned publish timestamp in case the event
+    // timestamp is ever missing (Pulsar reports an unset event timestamp as
+    // 0). Unlike the wall clock, the publish timestamp keeps the gaps between
+    // messages intact when a backlog is drained after downtime.
+    const eventTimestamp =
+      apcPulsarMessage.getEventTimestamp() ||
+      apcPulsarMessage.getPublishTimestamp();
     const anonymizedApcData = anonymize(
       logger,
       lookup,
       countCache,
       apcMessage,
+      eventTimestamp,
       config,
     );
     if (anonymizedApcData != null) {

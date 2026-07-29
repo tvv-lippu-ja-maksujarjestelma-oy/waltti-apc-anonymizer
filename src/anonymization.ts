@@ -45,24 +45,56 @@ export const sumDoorsAndClasses = (
     0.0,
   );
 
+export const isSameUniqueVehicleJourneyId = (
+  a: UniqueVehicleJourneyId,
+  b: UniqueVehicleJourneyId,
+): boolean =>
+  a.gtfsrtDirectionId === b.gtfsrtDirectionId &&
+  a.gtfsrtRouteId === b.gtfsrtRouteId &&
+  a.gtfsrtStartDate === b.gtfsrtStartDate &&
+  a.gtfsrtStartTime === b.gtfsrtStartTime &&
+  a.gtfsrtTripId === b.gtfsrtTripId;
+
+/**
+ * If two consecutive messages for the same vehicle and journey are further
+ * apart than this, the cached passenger count is considered stale and the
+ * accumulation starts over. As the journey matcher only produces messages
+ * while a vehicle serves a journey, a long silence typically means the
+ * vehicle has been on a deadrun and has been emptied in between.
+ */
+export const passengerCountStalenessLimitInMilliseconds = 30 * 60 * 1_000;
+
 export const getCountAndUpdateCache = (
   countCache: VehiclePassengerCountMap,
   uniqueVehicleId: UniqueVehicleId,
   uniqueVehicleJourneyId: UniqueVehicleJourneyId,
   doorClassCounts: matchedApc.DoorClassCount[],
+  eventTimestamp: number,
 ): number => {
   const messageSum = sumDoorsAndClasses(doorClassCounts);
-  const cachedCount = countCache.get(uniqueVehicleId);
-  let currentCount: [UniqueVehicleJourneyId, PassengerCount] = [
-    uniqueVehicleJourneyId,
-    messageSum,
-  ];
-  // FIXME: somewhere here, change the code so that the counter is zeroed after 30 minutes of the vehicle being on deadrun
-  if (cachedCount != null && cachedCount[0] === uniqueVehicleJourneyId) {
-    currentCount = [uniqueVehicleJourneyId, cachedCount[1] + messageSum];
+  const cachedEntry = countCache.get(uniqueVehicleId);
+  let passengerCount: PassengerCount = messageSum;
+  let latestEventTimestamp = eventTimestamp;
+  if (
+    cachedEntry != null &&
+    isSameUniqueVehicleJourneyId(
+      cachedEntry.uniqueVehicleJourneyId,
+      uniqueVehicleJourneyId,
+    ) &&
+    eventTimestamp - cachedEntry.eventTimestamp <=
+      passengerCountStalenessLimitInMilliseconds
+  ) {
+    passengerCount = cachedEntry.passengerCount + messageSum;
+    // A message delivered out of order must not move the timestamp backwards,
+    // as that could trigger a false staleness reset on the next message.
+    latestEventTimestamp = Math.max(cachedEntry.eventTimestamp, eventTimestamp);
   }
-  countCache.set(uniqueVehicleId, currentCount);
-  return currentCount[1];
+  countCache.set(uniqueVehicleId, {
+    uniqueVehicleJourneyId,
+    passengerCount,
+    eventTimestamp: latestEventTimestamp,
+  });
+  return passengerCount;
 };
 
 export const matchOccupancyStatus = (
@@ -144,6 +176,7 @@ export const anonymize = (
   lookup: (uniqueVehicleId: UniqueVehicleId) => VehicleProfile | undefined,
   countCache: VehiclePassengerCountMap,
   matchedApcMessage: matchedApc.MatchedApc,
+  eventTimestamp: number,
   { feedPublisherWalttiAuthorityMap, acceptedDeviceMap }: AnonymizationConfig,
 ): anonymizedApc.AnonymizedApc | undefined => {
   let result: anonymizedApc.AnonymizedApc | undefined;
@@ -200,6 +233,7 @@ export const anonymize = (
           uniqueVehicleId,
           uniqueVehicleJourneyId,
           matchedApcMessage.doorClassCounts,
+          eventTimestamp,
         );
         const occupancyStatusString = sample(logger, profile, currentSum);
         if (occupancyStatusString != null) {
