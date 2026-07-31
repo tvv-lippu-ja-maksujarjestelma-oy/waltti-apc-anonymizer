@@ -76,12 +76,14 @@ const keepUpdatingProfiles = async (
     logger.debug("Waiting for next profile message...");
     let message: Pulsar.Message | undefined;
     try {
-      message = await profileReader.readNext(PULSAR_READ_TIMEOUT_MS);
+      // Do NOT pass a timeout to readNext. When reader.readNext(timeout)
+      // expires without a message, the pulsar-client native addon crashes
+      // the process with a segfault. The profiles topic is quiet for hours
+      // between messages, so a timeout here is guaranteed to expire.
+      // consumer.receive(timeout) is not affected.
+      message = await profileReader.readNext();
     } catch (err) {
-      logger.warn(
-        { err, readTimeoutMs: PULSAR_READ_TIMEOUT_MS },
-        "Profile reader read failed",
-      );
+      logger.warn({ err }, "Profile reader read failed");
     }
     if (message != null) {
       logger.info(
