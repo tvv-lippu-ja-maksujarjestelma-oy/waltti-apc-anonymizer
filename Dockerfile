@@ -1,4 +1,4 @@
-FROM node:25-bookworm-slim AS base
+FROM node:26-bookworm-slim AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -45,7 +45,7 @@ RUN npm run build
 
 # The base image should be the same as the base image of base. Yet using ARG for
 # the base image irritates hadolint and might break Dependabot.
-FROM node:25-bookworm-slim AS production
+FROM node:26-bookworm-slim AS production
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV NODE_ENV=production
