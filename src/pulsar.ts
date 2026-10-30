@@ -20,7 +20,6 @@ export const createPulsarProducer = async (
   { producerConfig }: PulsarConfig,
 ) => {
   // There is a try-catch where this function is called.
-  // eslint-disable-next-line @typescript-eslint/return-await
   return await client.createProducer(producerConfig);
 };
 
@@ -29,7 +28,6 @@ export const createPulsarConsumer = async (
   consumerConfig: Pulsar.ConsumerConfig,
 ) => {
   // There is a try-catch where this function is called.
-  // eslint-disable-next-line @typescript-eslint/return-await
   return await client.subscribe(consumerConfig);
 };
 
@@ -38,6 +36,5 @@ export const createPulsarReader = async (
   readerConfig: Pulsar.ReaderConfig,
 ) => {
   // There is a try-catch where this function is called.
-  // eslint-disable-next-line @typescript-eslint/return-await
   return await client.createReader(readerConfig);
 };

@@ -46,7 +46,6 @@ const getLatestMessage = async (
     let stepInMilliseconds = 1_000 * stepInSeconds;
     let seekTimeInMilliseconds = now - stepInMilliseconds;
     await reader.seekTimestamp(seekTimeInMilliseconds);
-    /* eslint-disable no-await-in-loop */
     while (!reader.hasNext()) {
       stepInMilliseconds *= 2;
       seekTimeInMilliseconds = now - stepInMilliseconds;
@@ -55,7 +54,6 @@ const getLatestMessage = async (
     while (reader.hasNext()) {
       message = await reader.readNext();
     }
-    /* eslint-enable no-await-in-loop */
   } else {
     message = await reader.readNext();
   }
@@ -71,7 +69,6 @@ const keepUpdatingProfiles = async (
 ) => {
   logger.info("Starting profile update loop");
   // Errors are handled in the calling function.
-  /* eslint-disable no-await-in-loop */
   for (;;) {
     logger.debug("Waiting for next profile message...");
     let message: Pulsar.Message | undefined;
@@ -97,7 +94,6 @@ const keepUpdatingProfiles = async (
       update(message);
     }
   }
-  /* eslint-enable no-await-in-loop */
 };
 
 const keepUpdatingVehicleRegistry = async (
@@ -107,7 +103,6 @@ const keepUpdatingVehicleRegistry = async (
 ) => {
   logger.info("Starting vehicle registry update loop");
   // Errors are handled in the calling function.
-  /* eslint-disable no-await-in-loop */
   for (;;) {
     logger.debug("Waiting for next vehicle registry message...");
     let message: Pulsar.Message | undefined;
@@ -133,7 +128,6 @@ const keepUpdatingVehicleRegistry = async (
       await vehicleRegistryConsumer.acknowledge(message);
     }
   }
-  /* eslint-enable no-await-in-loop */
 };
 
 const handleApcMessage = (
@@ -203,7 +197,6 @@ const keepSendingAnonymizedApc = async (
   let producedCount = 0;
   let skippedCount = 0;
   // Errors are handled in the calling function.
-  /* eslint-disable no-await-in-loop */
   for (;;) {
     let apcPulsarMessage: Pulsar.Message | undefined;
     try {
@@ -245,7 +238,6 @@ const keepSendingAnonymizedApc = async (
       }
     }
   }
-  /* eslint-enable no-await-in-loop */
 };
 
 const keepProcessingMessages = async (
@@ -296,12 +288,9 @@ const keepProcessingMessages = async (
     let initialCount = 0;
     try {
       // Use a short timeout to drain all available messages
-      // eslint-disable-next-line no-constant-condition
       while (true) {
-        // eslint-disable-next-line no-await-in-loop
         const message = await vehicleRegistryConsumer.receive(2000);
         updateVehicleRegistry(message);
-        // eslint-disable-next-line no-await-in-loop
         await vehicleRegistryConsumer.acknowledge(message);
         initialCount += 1;
       }

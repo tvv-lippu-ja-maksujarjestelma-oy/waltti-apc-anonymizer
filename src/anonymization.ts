@@ -110,8 +110,9 @@ export const redactCounts = (
   matchedApcMessage: matchedApc.MatchedApc,
 ): Omit<matchedApc.MatchedApc, "doorClassCounts"> => {
   const reducedObject:
-    | Omit<matchedApc.MatchedApc, "doorClassCounts">
-    | matchedApc.MatchedApc = { ...matchedApcMessage };
+    Omit<matchedApc.MatchedApc, "doorClassCounts"> | matchedApc.MatchedApc = {
+    ...matchedApcMessage,
+  };
   delete reducedObject.doorClassCounts;
   return reducedObject;
 };

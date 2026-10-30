@@ -3,7 +3,7 @@
 import pino from "pino";
 import type Pulsar from "pulsar-client";
 import { createProfileMap, createVehicleProfileSearch } from "./vehicleProfile";
-import { VehicleProfileMap, UniqueVehicleId } from "./types";
+import { VehicleProfileMap } from "./types";
 
 const createTestLogger = () =>
   pino(
@@ -83,7 +83,7 @@ describe("createVehicleProfileSearch", () => {
 
     const { lookup } = createVehicleProfileSearch(logger, initialBase);
 
-    const profile = lookup("fi:kuopio:vehicle1" as UniqueVehicleId);
+    const profile = lookup("fi:kuopio:vehicle1");
     expect(profile).toBeDefined();
     expect(profile?.categories).toEqual(["EMPTY", "FULL"]);
   });
@@ -105,7 +105,7 @@ describe("createVehicleProfileSearch", () => {
 
     const { lookup } = createVehicleProfileSearch(logger, initialBase);
 
-    const profile = lookup("fi:kuopio:unknown" as UniqueVehicleId);
+    const profile = lookup("fi:kuopio:unknown");
     expect(profile).toBeUndefined();
   });
 
@@ -134,8 +134,8 @@ describe("createVehicleProfileSearch", () => {
     update(message);
 
     // Both vehicles should now be available
-    expect(lookup("fi:kuopio:vehicle1" as UniqueVehicleId)).toBeDefined();
-    expect(lookup("fi:kuopio:vehicle2" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:kuopio:vehicle1")).toBeDefined();
+    expect(lookup("fi:kuopio:vehicle2")).toBeDefined();
   });
 
   test("multiple updates accumulate profiles correctly", () => {
@@ -154,7 +154,7 @@ describe("createVehicleProfileSearch", () => {
     });
     update(message1);
 
-    expect(lookup("fi:kuopio:vehicle1" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:kuopio:vehicle1")).toBeDefined();
 
     // Second update adds vehicle2 (without vehicle1)
     const message2 = createMockMessage({
@@ -164,8 +164,8 @@ describe("createVehicleProfileSearch", () => {
     update(message2);
 
     // BOTH vehicles should still be available (this was the bug)
-    expect(lookup("fi:kuopio:vehicle1" as UniqueVehicleId)).toBeDefined();
-    expect(lookup("fi:kuopio:vehicle2" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:kuopio:vehicle1")).toBeDefined();
+    expect(lookup("fi:kuopio:vehicle2")).toBeDefined();
   });
 
   test("update overwrites existing vehicle with new profile", () => {
@@ -186,7 +186,7 @@ describe("createVehicleProfileSearch", () => {
     const { lookup, update } = createVehicleProfileSearch(logger, initialBase);
 
     // Verify initial profile
-    const initialProfile = lookup("fi:kuopio:vehicle1" as UniqueVehicleId);
+    const initialProfile = lookup("fi:kuopio:vehicle1");
     expect(initialProfile?.categories).toEqual(["OLD_CATEGORY"]);
 
     // Update with new profile for same vehicle model
@@ -197,7 +197,7 @@ describe("createVehicleProfileSearch", () => {
     update(message);
 
     // Profile should be updated
-    const updatedProfile = lookup("fi:kuopio:vehicle1" as UniqueVehicleId);
+    const updatedProfile = lookup("fi:kuopio:vehicle1");
     expect(updatedProfile?.categories).toEqual([
       "EMPTY",
       "FEW_SEATS_AVAILABLE",
@@ -237,9 +237,9 @@ describe("createVehicleProfileSearch", () => {
     );
 
     // All three vehicles should be available
-    expect(lookup("fi:city1:v1" as UniqueVehicleId)).toBeDefined();
-    expect(lookup("fi:city2:v2" as UniqueVehicleId)).toBeDefined();
-    expect(lookup("fi:city3:v3" as UniqueVehicleId)).toBeDefined();
+    expect(lookup("fi:city1:v1")).toBeDefined();
+    expect(lookup("fi:city2:v2")).toBeDefined();
+    expect(lookup("fi:city3:v3")).toBeDefined();
   });
 });
 

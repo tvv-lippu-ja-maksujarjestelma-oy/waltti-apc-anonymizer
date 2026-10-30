@@ -130,6 +130,7 @@ const getProfileCollectionBase = (
     } catch (err) {
       throw new Error(
         `If given, ${envVariable} must contain JSON representing a valid profile collection. Instead, this was given: ${string}`,
+        { cause: err },
       );
     }
   }

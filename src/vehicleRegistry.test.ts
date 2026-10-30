@@ -4,7 +4,7 @@ import {
   updateAcceptedDeviceMap,
   createVehicleRegistryHandler,
 } from "./vehicleRegistry";
-import type { AcceptedDeviceMap, UniqueVehicleId } from "./types";
+import type { AcceptedDeviceMap } from "./types";
 
 // Create a silent logger for tests
 const logger = pino({ level: "silent" });
@@ -39,9 +39,9 @@ describe("updateAcceptedDeviceMap", () => {
     updateAcceptedDeviceMap(logger, message, "fi:jyvaskyla", acceptedDeviceMap);
 
     expect(acceptedDeviceMap.size).toBe(1);
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_518" as UniqueVehicleId),
-    ).toEqual(new Set(["jl518-apc"]));
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_518")).toEqual(
+      new Set(["jl518-apc"]),
+    );
   });
 
   test("adds all devices for multi-device vehicle", () => {
@@ -61,9 +61,9 @@ describe("updateAcceptedDeviceMap", () => {
     updateAcceptedDeviceMap(logger, message, "fi:jyvaskyla", acceptedDeviceMap);
 
     expect(acceptedDeviceMap.size).toBe(1);
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_520" as UniqueVehicleId),
-    ).toEqual(new Set(["jl520-apc-1", "jl520-apc-2"]));
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_520")).toEqual(
+      new Set(["jl520-apc-1", "jl520-apc-2"]),
+    );
   });
 
   test("ignores non-PASSENGER_COUNTER equipment", () => {
@@ -83,9 +83,9 @@ describe("updateAcceptedDeviceMap", () => {
     updateAcceptedDeviceMap(logger, message, "fi:jyvaskyla", acceptedDeviceMap);
 
     expect(acceptedDeviceMap.size).toBe(1);
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_521" as UniqueVehicleId),
-    ).toEqual(new Set(["jl521-apc"]));
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_521")).toEqual(
+      new Set(["jl521-apc"]),
+    );
   });
 
   test("skips vehicle with no PASSENGER_COUNTER equipment", () => {
@@ -106,14 +106,8 @@ describe("updateAcceptedDeviceMap", () => {
 
   test("clears previous entries for same feedPublisherId", () => {
     const acceptedDeviceMap: AcceptedDeviceMap = new Map();
-    acceptedDeviceMap.set(
-      "fi:jyvaskyla:6714_old" as UniqueVehicleId,
-      new Set(["OLD-DEVICE"]),
-    );
-    acceptedDeviceMap.set(
-      "fi:kuopio:44517_other" as UniqueVehicleId,
-      new Set(["OTHER-DEVICE"]),
-    );
+    acceptedDeviceMap.set("fi:jyvaskyla:6714_old", new Set(["OLD-DEVICE"]));
+    acceptedDeviceMap.set("fi:kuopio:44517_other", new Set(["OTHER-DEVICE"]));
 
     const vehicleData = JSON.stringify([
       {
@@ -128,15 +122,9 @@ describe("updateAcceptedDeviceMap", () => {
 
     // Old fi:jyvaskyla entry should be removed, fi:kuopio preserved
     expect(acceptedDeviceMap.size).toBe(2);
-    expect(
-      acceptedDeviceMap.has("fi:jyvaskyla:6714_old" as UniqueVehicleId),
-    ).toBe(false);
-    expect(
-      acceptedDeviceMap.has("fi:kuopio:44517_other" as UniqueVehicleId),
-    ).toBe(true);
-    expect(
-      acceptedDeviceMap.has("fi:jyvaskyla:6714_518" as UniqueVehicleId),
-    ).toBe(true);
+    expect(acceptedDeviceMap.has("fi:jyvaskyla:6714_old")).toBe(false);
+    expect(acceptedDeviceMap.has("fi:kuopio:44517_other")).toBe(true);
+    expect(acceptedDeviceMap.has("fi:jyvaskyla:6714_518")).toBe(true);
   });
 
   test("later message with new format overrides earlier message with old format", () => {
@@ -160,9 +148,9 @@ describe("updateAcceptedDeviceMap", () => {
       acceptedDeviceMap,
     );
 
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_483" as UniqueVehicleId),
-    ).toEqual(new Set(["6714_483"]));
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_483")).toEqual(
+      new Set(["6714_483"]),
+    );
 
     const newFormatMessage = createMockMessage(
       JSON.stringify([
@@ -187,9 +175,9 @@ describe("updateAcceptedDeviceMap", () => {
     );
 
     expect(acceptedDeviceMap.size).toBe(1);
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_483" as UniqueVehicleId),
-    ).toEqual(new Set(["jl483-0009d8066d7c"]));
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_483")).toEqual(
+      new Set(["jl483-0009d8066d7c"]),
+    );
   });
 
   test("handles multiple vehicles in one message", () => {
@@ -211,12 +199,12 @@ describe("updateAcceptedDeviceMap", () => {
     updateAcceptedDeviceMap(logger, message, "fi:jyvaskyla", acceptedDeviceMap);
 
     expect(acceptedDeviceMap.size).toBe(2);
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_518" as UniqueVehicleId),
-    ).toEqual(new Set(["jl518-apc"]));
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_519" as UniqueVehicleId),
-    ).toEqual(new Set(["jl519-apc"]));
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_518")).toEqual(
+      new Set(["jl518-apc"]),
+    );
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_519")).toEqual(
+      new Set(["jl519-apc"]),
+    );
   });
 
   test("handles invalid JSON gracefully", () => {
@@ -249,9 +237,9 @@ describe("updateAcceptedDeviceMap", () => {
     updateAcceptedDeviceMap(logger, message, "fi:jyvaskyla", acceptedDeviceMap);
 
     expect(acceptedDeviceMap.size).toBe(1);
-    expect(
-      acceptedDeviceMap.get("fi:jyvaskyla:6714_476" as UniqueVehicleId),
-    ).toEqual(new Set(["jl476-0009d80670fc"]));
+    expect(acceptedDeviceMap.get("fi:jyvaskyla:6714_476")).toEqual(
+      new Set(["jl476-0009d80670fc"]),
+    );
   });
 });
 
@@ -284,9 +272,7 @@ describe("createVehicleRegistryHandler", () => {
     update(message);
 
     expect(acceptedDeviceMap.size).toBe(1);
-    expect(
-      acceptedDeviceMap.has("fi:jyvaskyla:6714_518" as UniqueVehicleId),
-    ).toBe(true);
+    expect(acceptedDeviceMap.has("fi:jyvaskyla:6714_518")).toBe(true);
   });
 
   test("handles topic with different feedPublisherId format", () => {
@@ -314,9 +300,7 @@ describe("createVehicleRegistryHandler", () => {
     update(message);
 
     expect(acceptedDeviceMap.size).toBe(1);
-    expect(acceptedDeviceMap.has("fi:kuopio:44517_6" as UniqueVehicleId)).toBe(
-      true,
-    );
+    expect(acceptedDeviceMap.has("fi:kuopio:44517_6")).toBe(true);
   });
 
   test("does not update map when topic has no vehicle-catalogue prefix", () => {

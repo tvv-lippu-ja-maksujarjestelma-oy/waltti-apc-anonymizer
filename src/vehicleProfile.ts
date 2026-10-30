@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/no-unresolved
 import csvParse from "csv-parse/sync";
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
@@ -67,7 +66,7 @@ export const createProfileMap = (
         string[],
         ...number[][],
       ];
-    } catch (err) {
+    } catch {
       logger.error(
         { model, csvString },
         "csvString could not be parsed as CSV. Let's use the rest of the models, though.",
