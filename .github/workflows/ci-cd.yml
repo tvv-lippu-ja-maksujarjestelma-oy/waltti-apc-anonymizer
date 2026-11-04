@@ -9,6 +9,9 @@ name: "CI/CD: Continuous integration and continuous deployment"
       - "v*"
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   IMAGE_NAME: "tvvlmj/${{ github.event.repository.name }}"
   TEST_STAGE: tester
@@ -21,11 +24,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install Node
         uses: actions/setup-node@v3
         with:
           node-version: "lts/*"
           cache: "npm"
+      - name: Test dependency merge policy
+        run: node --test .github/dependency-policy/*.cases.cjs
       - name: Install NPM dependencies
         run: npm ci
       # This step considers also the files ignored in .dockerignore, such as
