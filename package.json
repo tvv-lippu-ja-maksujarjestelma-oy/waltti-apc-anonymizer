@@ -35,7 +35,7 @@
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
     "@eslint/js": "^10.0.1",
-    "@tsconfig/strictest": "^2.0.8",
+    "@tsconfig/strictest": "^2.0.9",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.5",
     "eslint": "^10.13.0",
